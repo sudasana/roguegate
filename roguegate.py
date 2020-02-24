@@ -1,15 +1,25 @@
-import tcod
-import tcod.event
+import libtcodpy as libtcod
 
-tcod.console_set_custom_font('cp437_16x16.png', tcod.FONT_LAYOUT_ASCII_INROW | tcod.FONT_TYPE_GREYSCALE)
+# create mouse and key event holders
+mouse = libtcod.Mouse()
+key = libtcod.Key()
 
-with tcod.console_init_root(80, 40, title='RogueGate', order='F') as root_console:
+libtcod.console_set_custom_font('cp437_16x16.png', libtcod.FONT_LAYOUT_ASCII_INROW | libtcod.FONT_TYPE_GREYSCALE)
+
+root_console = libtcod.console_init_root(80, 40, title='RogueGate', order='F')
+libtcod.sys_set_fps(50)
+
+libtcod.console_print(0, 0, 0, 'Hello world!')
+
+exit_game = False
+while not exit_game:
+	if libtcod.console_is_window_closed(): sys.exit()
+	libtcod.console_flush()
+	event = libtcod.sys_check_for_event(libtcod.EVENT_KEY_RELEASE|libtcod.EVENT_KEY_PRESS|libtcod.EVENT_MOUSE,
+		key, mouse)
+	if event != libtcod.EVENT_KEY_PRESS: continue
 	
-	root_console.print(x=0, y=0, fg=(217,163,0), string='Hello World!')
-	while True:
-		tcod.console_flush()
-		for event in tcod.event.wait():
-			if event.type == "QUIT":
-				raise SystemExit()
+	if key.vk == libtcod.KEY_ESCAPE:
+		exit_game = True
 
 # END #

@@ -47,6 +47,26 @@ CONSOLE_COL_6 = libtcod.Color(140,105,0)
 CONSOLE_COL_7 = libtcod.Color(102,77,0)
 CONSOLE_COL_8 = libtcod.Color(64,48,0)
 
+##### Map Cell Type Definitions #####
+CELL_NULL = 0						# not active, no interactions possible
+CELL_TILE = 1						# generic linoleum tile flooring
+CELL_WALL = 2						# solid concrete wall
+
+
+##### BlockFloor Object - represents one floor of one block of the entire complex #####
+class BlockFloor():
+	def __init__(self):
+	
+		# character map - one for each possible map cell
+		self.char_map = {}
+		for x in range(61):
+			for y in range(40):
+				# set all cells to null to start
+				self.char_map[(x,y)] = CELL_NULL
+				
+				# TEMP testing
+				self.char_map[(x,y)] = CELL_TILE
+	
 
 
 
@@ -54,25 +74,44 @@ CONSOLE_COL_8 = libtcod.Color(64,48,0)
 class Game:
 	def __init__(self):
 		
-		pass
+		# TEMP - only one block-floor to start
+		self.block_floor = BlockFloor()
 	
 	
 	# update the information console
 	def UpdateInfoCon(self):
 		libtcod.console_clear(info_con)
 		libtcod.console_print(info_con, 4, 1, '06-17-72')
-		libtcod.console_print(info_con, 4, 4, '...th Floor')
+		libtcod.console_print(info_con, 4, 4, 'Block X')
+		libtcod.console_print(info_con, 4, 5, '...th Floor')
+	
+	
+	# update the floor map console
+	def UpdateMapCon(self):
+		libtcod.console_clear(map_con)
+		
+		# draw each map cell to the console
+		for x in range(61):
+			for y in range(40):
+				floor_cell = self.block_floor.char_map[(x,y)]
+				if floor_cell == CELL_NULL:
+					continue
+				elif floor_cell == CELL_TILE:
+					libtcod.console_put_char_ex(map_con, x, y, 250,
+						CONSOLE_COL_8, libtcod.black)
+				elif floor_cell == CELL_WALL:
+					libtcod.console_put_char_ex(map_con, x, y, 178,
+						CONSOLE_COL_4, libtcod.black)
+				
 	
 	
 	# update the game screen and blit to the root console
 	def UpdateScreen(self):
 		libtcod.console_clear(con)
-		
 		libtcod.console_blit(info_con, 0, 0, 0, 0, con, 0, 0)
-		
+		libtcod.console_blit(map_con, 0, 0, 0, 0, con, 19, 0)
 		libtcod.console_set_default_foreground(con, CONSOLE_COL_3)
 		DrawVLine(con, 18, 0, 40, 179)
-		
 		libtcod.console_blit(con, 0, 0, 0, 0, 0, 0, 0)
 		
 	
@@ -83,9 +122,11 @@ class Game:
 		
 		# create the main screen consoles
 		info_con = NewConsole(18, 40, libtcod.black, CONSOLE_COL_2)
+		map_con = NewConsole(61, 40, libtcod.black, CONSOLE_COL_2)
 		
 		# draw consoles and game screen for first time
 		self.UpdateInfoCon()
+		self.UpdateMapCon()
 		self.UpdateScreen()
 		
 		exit_loop = False

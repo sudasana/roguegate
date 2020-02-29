@@ -117,8 +117,9 @@ class BlockFloor():
 			for y in range(40):
 				self.char_map[(x,y)] = CELL_NULL
 		
-		# clear list of rooms
+		# clear list of rooms, light entities
 		self.rooms = []
+		self.light_entities = []
 		
 		# set a main horizontal hallway to start
 		hx1 = libtcod.random_get_int(0, 2, 6)
@@ -324,6 +325,10 @@ class Entity:
 class Game:
 	def __init__(self):
 		
+		self.hour = 19			# current time
+		self.minute = 0	
+		self.next_day = False		# if clock has passed midnight already
+		
 		# list of entities in the world
 		self.entities = []
 		
@@ -362,9 +367,17 @@ class Game:
 	# update the information console
 	def UpdateInfoCon(self):
 		libtcod.console_clear(info_con)
-		libtcod.console_print(info_con, 4, 1, '06-17-72')
-		libtcod.console_print(info_con, 4, 4, 'Block A')
-		libtcod.console_print(info_con, 4, 5, 'Ground Floor')
+		if self.next_day:
+			text = '06-17-72'
+		else:
+			text = '06-18-72'
+		libtcod.console_print(info_con, 2, 1, text)
+		
+		text = str(self.hour).zfill(2) + ':' + str(self.minute).zfill(2)
+		libtcod.console_print(info_con, 2, 2, text)
+		
+		libtcod.console_print(info_con, 2, 5, 'Block A')
+		libtcod.console_print(info_con, 2, 6, 'Ground Floor')
 	
 	
 	# update the floor map console
@@ -483,6 +496,7 @@ class Game:
 			if key_char == 'g':
 				self.block_floor.GenerateMap()
 				self.player.location = self.block_floor.center_point	# move the player too
+				self.block_floor.GenerateLightMap()
 				self.UpdateMapCon()
 				self.UpdateEntityCon()
 				self.UpdateScreen()

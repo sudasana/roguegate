@@ -1,2 +1,5 @@
 
 *.py~
+savegame.bak
+savegame.dat
+savegame.dir

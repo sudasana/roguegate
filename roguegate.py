@@ -25,7 +25,7 @@
 ##### Libraries #####
 import os, sys						# OS-related stuff
 import libtcodpy as libtcod
-
+import shelve						# saving and loading games
 
 
 ##### Constants #####
@@ -151,7 +151,7 @@ class BlockFloor():
 			
 			# TEMP testing
 			self.SetCell(x, y, CELL_MARKER, False, False)
-			print('Room corner is ' + str(x) + ',' + str(y))
+			#print('Room corner is ' + str(x) + ',' + str(y))
 			
 			# walk through the room and determine the maximum area
 			room_height = 0
@@ -304,6 +304,8 @@ class Game:
 		self.UpdateEntityCon()
 		self.UpdateScreen()
 		
+		SaveGame()
+		
 		exit_loop = False
 		while not exit_loop:
 			
@@ -313,6 +315,7 @@ class Game:
 			
 			# TEMP - quit to main menu right away
 			if key.vk == libtcod.KEY_ESCAPE:
+				SaveGame()
 				exit_loop = True
 				continue
 			
@@ -335,6 +338,7 @@ class Game:
 				if self.MovePlayer(x_dist, y_dist):
 					self.UpdateEntityCon()
 					self.UpdateScreen()
+					SaveGame()
 				
 				continue
 			
@@ -343,12 +347,28 @@ class Game:
 				self.block_floor.GenerateMap()
 				self.UpdateMapCon()
 				self.UpdateScreen()
+				SaveGame()
 				continue
 		
 
 
 
 ##### General Functions ######
+
+# save the current game in progress
+def SaveGame():
+	save = shelve.open('savegame', 'n')
+	save['game'] = game
+	save.close()
+
+
+# load a saved game
+def LoadGame():
+	global game
+	save = shelve.open('savegame')
+	game = save['game']
+	save.close()
+
 
 # shortcut for generating consoles
 def NewConsole(x, y, bg, fg, key_colour=False):
@@ -408,7 +428,7 @@ def FlushKeyboardEvents():
 #                                       Main Menu                                        #
 ##########################################################################################
 
-global key_down
+global game, key_down
 key_down = False
 
 # create mouse and key event holders
@@ -455,20 +475,15 @@ def DrawMainMenu():
 	# action keys
 	libtcod.console_set_default_foreground(con, CONSOLE_COL_1)
 	libtcod.console_put_char(con, 32, 28, 'N')
-	
-	# TEMP
-	libtcod.console_set_default_foreground(con, CONSOLE_COL_7)
 	libtcod.console_put_char(con, 32, 29, 'C')
-	libtcod.console_put_char(con, 32, 30, 'O')
+	#libtcod.console_put_char(con, 32, 30, 'O')
 	libtcod.console_set_default_foreground(con, CONSOLE_COL_1)
 	libtcod.console_put_char(con, 32, 31, 'Q')
 	
 	libtcod.console_set_default_foreground(con, CONSOLE_COL_3)
 	libtcod.console_print(con, 36, 28, 'New Session')
-	# TEMP
-	libtcod.console_set_default_foreground(con, CONSOLE_COL_7)
 	libtcod.console_print(con, 36, 29, 'Continue Session')
-	libtcod.console_print(con, 36, 30, 'Options')
+	#libtcod.console_print(con, 36, 30, 'Options')
 	libtcod.console_set_default_foreground(con, CONSOLE_COL_1)
 	libtcod.console_print(con, 36, 31, 'Quit')
 	
@@ -489,6 +504,17 @@ while not exit_game:
 	
 	if key_char == 'q':
 		exit_game = True
+		continue
+	
+	# continue saved session
+	elif key_char == 'c':
+		LoadGame()
+		
+		# start the input loop
+		game.DoInputLoop()
+		
+		# re-draw main menu
+		DrawMainMenu()
 		continue
 	
 	# New session

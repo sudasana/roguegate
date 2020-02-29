@@ -27,6 +27,7 @@ import os, sys						# OS-related stuff
 import libtcodpy as libtcod
 import shelve						# saving and loading games
 from random import choice
+from math import sqrt
 
 
 ##### Constants #####
@@ -60,8 +61,11 @@ CELL_MARKER = 100					# a marker of some kind, used for debugging
 class BlockFloor():
 	def __init__(self):
 		
+		self.char_map = {}			# map of cells
 		self.center_point = (0,0)
 		self.rooms = []				# list of rooms in (x,y,w,h) format
+		
+		self.light_map = {}			# light values for cells
 		
 		# generate the map for this block-floor
 		self.GenerateMap()
@@ -100,7 +104,6 @@ class BlockFloor():
 		
 		# character map - one for each possible map cell
 		# set all cells to null to start
-		self.char_map = {}
 		for x in range(61):
 			for y in range(40):
 				self.char_map[(x,y)] = CELL_NULL
@@ -199,9 +202,8 @@ class BlockFloor():
 			x += width+1
 
 		
-		# TODO: do the same for the vertical hallway
+		# TODO: do the same for the vertical hallway?
 		
-		print('DEBUG: ' + str(len(self.rooms)) + ' rooms recorded.')
 		
 		# create doors to connect rooms to at least one hallway
 		
@@ -227,7 +229,35 @@ class BlockFloor():
 			
 			(x1, y1) = choice(possible_door_cells)
 			self.SetCell(x1, y1, CELL_DOOR, False, False)
+	
+	
+	# generate or re-generate the light map for all cells in this block-level
+	def GenerateLightMap(self):
 		
+		# set all initial values to 0
+		for x in range(61):
+			for y in range(40):
+				self.light_map[(x,y)] = 0
+
+		# TESTING - cast light around the player
+		(px, py) = game.player.location
+		distance = 6
+		
+		for xm in range(0-distance,distance+1):
+			for ym in range(0-distance,distance+1):
+				
+				# cell is off map
+				if (px+xm, py+ym) not in self.light_map:
+					continue
+				
+				point_distance = round(GetDistanceBetween(0, 0, xm, ym), 2)
+				if point_distance > float(distance):
+					continue
+				
+				# set this cell's light level based on distance from player
+				light_level = round(point_distance / float(distance), 2)
+				
+				self.light_map[(px+xm, py+ym)] = 255 - int(255.0 * light_level)
 
 
 
@@ -306,19 +336,24 @@ class Game:
 				if cell == CELL_NULL:
 					continue
 				elif cell == CELL_TILE:
-					libtcod.console_put_char_ex(map_con, x, y, 250,
-						CONSOLE_COL_8, libtcod.black)
+					char = 250
+					col = CONSOLE_COL_8
 				elif cell == CELL_WALL:
-					libtcod.console_put_char_ex(map_con, x, y, 178,
-						CONSOLE_COL_4, libtcod.black)
+					char = 178
+					col = CONSOLE_COL_4
 				elif cell == CELL_DOOR:
-					libtcod.console_put_char_ex(map_con, x, y, 196,
-						CONSOLE_COL_3, libtcod.black)
-				
-				# Debug cell type
+					char = 196
+					col = CONSOLE_COL_3
 				elif floor_cell == CELL_MARKER:
-					libtcod.console_put_char_ex(map_con, x, y, 254,
-						CONSOLE_COL_1, libtcod.black)
+					char = 254
+					col = CONSOLE_COL_1
+				
+				# change display colour depending on light level of this cell
+				l = self.block_floor.light_map[(x,y)]
+				col = col * libtcod.Color(l, l, l)
+				
+				# draw the display character for this cell
+				libtcod.console_put_char_ex(map_con, x, y, char, col, libtcod.black)
 	
 	
 	# draw entities to the entity console
@@ -387,7 +422,11 @@ class Game:
 					y_dist = 1
 				
 				if self.MovePlayer(x_dist, y_dist):
+					
+					self.block_floor.GenerateLightMap()
+					self.UpdateMapCon()
 					self.UpdateEntityCon()
+					
 					self.UpdateScreen()
 					SaveGame()
 				
@@ -407,6 +446,11 @@ class Game:
 
 
 ##### General Functions ######
+
+# get the distance between two points
+def GetDistanceBetween(x1, y1, x2, y2):
+	return sqrt(abs(x1-x2)**2 + abs(y1-y2)**2)
+
 
 # save the current game in progress
 def SaveGame():
@@ -575,6 +619,9 @@ while not exit_game:
 		
 		# create a new game object
 		game = Game()
+		
+		# generate the light map for the block-floor
+		game.block_floor.GenerateLightMap()
 		
 		# start the input loop
 		game.DoInputLoop()

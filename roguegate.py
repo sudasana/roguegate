@@ -60,8 +60,29 @@ class BlockFloor():
 		# generate the map for this block-floor
 		self.GenerateMap()
 	
+	# set a given cell to a cell type, ignores if not on map
+	def SetCell(self, x, y, new_type):
+		if (x,y) not in self.char_map: return
+		
+		# if a floor cell has already been set here, don't cover it with a wall
+		if self.char_map[(x,y)] == CELL_TILE and new_type == CELL_WALL: return
+		
+		self.char_map[(x,y)] = new_type
+	
 	# generate or re-generate the map, 61x40
 	def GenerateMap(self):
+		
+		# create a room: h, w is the floor space, with one extra layer of walls
+		def AddRoom(x1, y1, w, h):
+			for x in range(x1, x1+w+1):
+				for y in range(y1, y1+h):
+					self.SetCell(x, y, CELL_TILE)
+			for x in range(x1, x1+w+1):
+				self.SetCell(x, y1-1, CELL_WALL)
+				self.SetCell(x, y1+h, CELL_WALL)
+			for y in range(y1-1, y1+h+1):
+				self.SetCell(x1-1, y, CELL_WALL)
+				self.SetCell(x1+w+1, y, CELL_WALL)
 		
 		# character map - one for each possible map cell
 		# set all cells to null to start
@@ -71,13 +92,18 @@ class BlockFloor():
 				self.char_map[(x,y)] = CELL_NULL
 		
 		# set a main horizontal hallway to start
-		x1 = libtcod.random_get_int(0, 4, 8)
+		x1 = libtcod.random_get_int(0, 2, 6)
 		y1 = libtcod.random_get_int(0, 8, 30)
 		w = libtcod.random_get_int(0, 53, 59) - x1
-		for x in range(x1, x1+w+1):
-			for y in range(y1, y1+3):
-				self.char_map[(x,y)] = CELL_TILE
-
+		AddRoom(x1, y1, w, 3)
+		
+		
+		# set up a vertical hallway
+		x1 = libtcod.random_get_int(0, 12, 50)
+		y1 = libtcod.random_get_int(0, 4, 8)
+		h = libtcod.random_get_int(0, 30, 38) - y1
+		AddRoom(x1, y1, 3, h)
+		
 
 
 ##### Game Object - holds everything for a given game #####

@@ -58,6 +58,8 @@ CELL_MARKER = 100					# a marker of some kind, used for debugging
 class BlockFloor():
 	def __init__(self):
 		
+		self.center_point = (0,0)
+		
 		# generate the map for this block-floor
 		self.GenerateMap()
 	
@@ -103,6 +105,9 @@ class BlockFloor():
 		vy1 = libtcod.random_get_int(0, 4, 8)
 		vh = libtcod.random_get_int(0, 30, 38) - vy1
 		AddRoom(vx1, vy1, 3, vh, skip_floors=True)
+		
+		# record center point
+		self.center_point = (vx1+1, hy1+1)
 		
 		# determine the height of the rooms off the horizontal hallway
 		room_height_upper = libtcod.random_get_int(0, 2, 4) + libtcod.random_get_int(0, 2, 4)
@@ -175,7 +180,22 @@ class BlockFloor():
 					break
 			
 			# TODO: see if room can be broken up
-			
+
+
+
+##### Entity Object - represents the player, one of the burglars, etc.
+class Entity:
+	def __init__(self):
+		self.is_player = False
+		self.location = (0,0)		# current location in the world
+	
+	# draw entity onto the entity console
+	def DrawMe(self):
+		
+		if self.is_player:
+			(x,y) = self.location
+			libtcod.console_put_char_ex(entity_con, x, y, 64,
+				CONSOLE_COL_1, libtcod.black)
 						
 
 
@@ -185,14 +205,46 @@ class Game:
 		
 		# TEMP - only one block-floor to start
 		self.block_floor = BlockFloor()
+		
+		# list of entities in the world
+		self.entities = []
+		
+		# create player object
+		new_entity = Entity()
+		new_entity.is_player = True
+		new_entity.location = self.block_floor.center_point
+		self.entities.append(new_entity)
+		
+		self.player = new_entity
+	
+	
+	# try to move the player one cell in the given direction
+	def MovePlayer(self, x_dist, y_dist):
+		
+		(x,y) = self.player.location
+		
+		# make sure new location would still be on map
+		if x+x_dist < 0 or x+x_dist >= 61:
+			return False
+		if y+y_dist < 0 or y+y_dist >= 40:
+			return False
+		
+		# check for wall blocking
+		if self.block_floor.char_map[(x+x_dist,y+y_dist)] == CELL_WALL: return False
+		
+		x = x+x_dist
+		y = y+y_dist
+		
+		self.player.location = (x,y)
+		return True
 	
 	
 	# update the information console
 	def UpdateInfoCon(self):
 		libtcod.console_clear(info_con)
 		libtcod.console_print(info_con, 4, 1, '06-17-72')
-		libtcod.console_print(info_con, 4, 4, 'Block X')
-		libtcod.console_print(info_con, 4, 5, '...th Floor')
+		libtcod.console_print(info_con, 4, 4, 'Block A')
+		libtcod.console_print(info_con, 4, 5, 'Ground Floor')
 	
 	
 	# update the floor map console
@@ -216,7 +268,13 @@ class Game:
 				elif floor_cell == CELL_MARKER:
 					libtcod.console_put_char_ex(map_con, x, y, 254,
 						CONSOLE_COL_1, libtcod.black)
-				
+	
+	
+	# draw entities to the entity console
+	def UpdateEntityCon(self):
+		libtcod.console_clear(entity_con)
+		for entity in self.entities:
+			entity.DrawMe()
 	
 	
 	# update the game screen and blit to the root console
@@ -224,6 +282,7 @@ class Game:
 		libtcod.console_clear(con)
 		libtcod.console_blit(info_con, 0, 0, 0, 0, con, 0, 0)
 		libtcod.console_blit(map_con, 0, 0, 0, 0, con, 19, 0)
+		libtcod.console_blit(entity_con, 0, 0, 0, 0, con, 19, 0)
 		libtcod.console_set_default_foreground(con, CONSOLE_COL_3)
 		DrawVLine(con, 18, 0, 40, 179)
 		libtcod.console_blit(con, 0, 0, 0, 0, 0, 0, 0)
@@ -232,15 +291,17 @@ class Game:
 	# do the input loop for the active game
 	def DoInputLoop(self):
 		
-		global info_con, map_con
+		global info_con, map_con, entity_con
 		
 		# create the main screen consoles
 		info_con = NewConsole(18, 40, libtcod.black, CONSOLE_COL_2)
 		map_con = NewConsole(61, 40, libtcod.black, CONSOLE_COL_2)
+		entity_con = NewConsole(61, 40, KEY_COLOR, CONSOLE_COL_2, key_colour=True)
 		
 		# draw consoles and game screen for first time
 		self.UpdateInfoCon()
 		self.UpdateMapCon()
+		self.UpdateEntityCon()
 		self.UpdateScreen()
 		
 		exit_loop = False
@@ -256,6 +317,26 @@ class Game:
 				continue
 			
 			key_char = chr(key.c).lower()
+			
+			# player movement
+			if key_char in ['a', 's', 'd', 'w']:
+				
+				x_dist = 0
+				y_dist = 0
+				if key_char == 'a':
+					x_dist = -1
+				elif key_char == 'd':
+					x_dist = 1
+				elif key_char == 'w':
+					y_dist = -1
+				else:
+					y_dist = 1
+				
+				if self.MovePlayer(x_dist, y_dist):
+					self.UpdateEntityCon()
+					self.UpdateScreen()
+				
+				continue
 			
 			# DEBUG - regenerate the block-floor map
 			if key_char == 'g':

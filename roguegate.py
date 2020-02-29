@@ -364,9 +364,13 @@ class Game:
 		return True
 	
 	
-	# update the information console
+	# update the information console, 18x40
 	def UpdateInfoCon(self):
 		libtcod.console_clear(info_con)
+		
+		libtcod.console_set_default_foreground(info_con, CONSOLE_COL_2)
+		
+		# display current date and time
 		if self.next_day:
 			text = '06-17-72'
 		else:
@@ -378,6 +382,18 @@ class Game:
 		
 		libtcod.console_print(info_con, 2, 5, 'Block A')
 		libtcod.console_print(info_con, 2, 6, 'Ground Floor')
+		
+		# security status
+		libtcod.console_print(info_con, 2, 9, 'Status: CLEAR')
+		
+		
+		# action key commands
+		libtcod.console_set_default_foreground(info_con, CONSOLE_COL_1)
+		libtcod.console_print(info_con, 2, 38, 'M')
+		
+		libtcod.console_set_default_foreground(info_con, CONSOLE_COL_3)
+		libtcod.console_print(info_con, 5, 38, 'View Map')
+		
 	
 	
 	# update the floor map console

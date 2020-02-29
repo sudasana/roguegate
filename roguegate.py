@@ -64,11 +64,20 @@ class BlockFloor():
 		self.char_map = {}			# map of cells
 		self.center_point = (0,0)
 		self.rooms = []				# list of rooms in (x,y,w,h) format
+		self.light_entities = []		# list of lights in the map
 		
 		self.light_map = {}			# light values for cells
 		
 		# generate the map for this block-floor
 		self.GenerateMap()
+	
+	
+	# add a light entity at the given location
+	def AddLight(self, x, y, light_radius):
+		new_entity = Entity()
+		new_entity.location = (x, y)
+		new_entity.light_radius = light_radius
+		self.light_entities.append(new_entity)
 	
 	
 	# set a given cell to a cell type, ignores if not on map
@@ -234,30 +243,52 @@ class BlockFloor():
 	# generate or re-generate the light map for all cells in this block-level
 	def GenerateLightMap(self):
 		
+		# cast light from the given point to the given radius
+		def CastLight(x, y, radius):
+			
+			if radius == 0: return
+			
+			for xm in range(0-radius,radius+1):
+				for ym in range(0-radius,radius+1):
+					
+					# cell is off map
+					if (x+xm, y+ym) not in self.light_map:
+						continue
+					
+					point_distance = round(GetDistanceBetween(0, 0, xm, ym), 2)
+					if point_distance > float(radius):
+						continue
+					
+					# calculate what the new light level would be based on distance from player
+					new_level = 255 - int(255.0 * round(point_distance / float(radius), 2))
+					
+					# if level is higher, set new level
+					
+					# set this cell's light level 
+					if new_level > self.light_map[(x+xm, y+ym)]:
+						self.light_map[(x+xm, y+ym)] = new_level
+		
+		# TEMP - full light
+		
 		# set all initial values to 0
 		for x in range(61):
 			for y in range(40):
-				self.light_map[(x,y)] = 0
+				self.light_map[(x,y)] = 255
+		
+		return
+		
+		# cast light from each light entity
+		for entity in self.light_entities:
+			(x,y) = entity.location
+			CastLight(x, y, entity.light_radius)
 
 		# TESTING - cast light around the player
-		(px, py) = game.player.location
-		distance = 6
+		(x, y) = game.player.location
+		CastLight(x, y, 6)
 		
-		for xm in range(0-distance,distance+1):
-			for ym in range(0-distance,distance+1):
-				
-				# cell is off map
-				if (px+xm, py+ym) not in self.light_map:
-					continue
-				
-				point_distance = round(GetDistanceBetween(0, 0, xm, ym), 2)
-				if point_distance > float(distance):
-					continue
-				
-				# set this cell's light level based on distance from player
-				light_level = round(point_distance / float(distance), 2)
-				
-				self.light_map[(px+xm, py+ym)] = 255 - int(255.0 * light_level)
+		
+		
+		
 
 
 
@@ -266,12 +297,19 @@ class Entity:
 	def __init__(self):
 		self.is_player = False
 		self.location = (0,0)		# current location in the world
+		self.light_radius = 0		# entity emits light ot his radius
 	
 	# draw entity onto the entity console
 	def DrawMe(self):
 		
-		if self.is_player:
-			(x,y) = self.location
+		(x,y) = self.location
+		
+		# light entity
+		if self.light_radius > 0:
+			libtcod.console_put_char_ex(entity_con, x, y, 254,
+				CONSOLE_COL_1, libtcod.black)
+
+		elif self.is_player:
 			libtcod.console_put_char_ex(entity_con, x, y, 64,
 				CONSOLE_COL_1, libtcod.black)
 						
@@ -281,11 +319,11 @@ class Entity:
 class Game:
 	def __init__(self):
 		
-		# TEMP - only one block-floor to start
-		self.block_floor = BlockFloor()
-		
 		# list of entities in the world
 		self.entities = []
+		
+		# TEMP - only one block-floor to start
+		self.block_floor = BlockFloor()
 		
 		# create player object
 		new_entity = Entity()
@@ -359,6 +397,11 @@ class Game:
 	# draw entities to the entity console
 	def UpdateEntityCon(self):
 		libtcod.console_clear(entity_con)
+		
+		# draw light entitites first
+		for entity in self.block_floor.light_entities:
+			entity.DrawMe()
+		
 		for entity in self.entities:
 			entity.DrawMe()
 	

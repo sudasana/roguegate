@@ -132,8 +132,16 @@ class BlockFloor():
 		vh = libtcod.random_get_int(0, 30, 38) - vy1
 		AddRoom(vx1, vy1, 3, vh, skip_floors=True)
 		
-		# record center point
+		# record center point and add a light here
 		self.center_point = (vx1+1, hy1+1)
+		self.AddLight(vx1+1, hy1+1, 5)
+		
+		# add lights down each hallway
+		for x in range(vx1+1, hx1, -15):
+			self.AddLight(x, hy1+1, 5)
+		for x in range(vx1+1, hx1+hw, 15):
+			self.AddLight(x, hy1+1, 5)
+		
 		
 		# determine the height of the rooms off the horizontal hallway
 		room_height_upper = libtcod.random_get_int(0, 2, 6) + libtcod.random_get_int(0, 2, 6)
@@ -267,15 +275,12 @@ class BlockFloor():
 					# set this cell's light level 
 					if new_level > self.light_map[(x+xm, y+ym)]:
 						self.light_map[(x+xm, y+ym)] = new_level
+			
 		
-		# TEMP - full light
-		
-		# set all initial values to 0
+		# set all initial values to low light
 		for x in range(61):
 			for y in range(40):
-				self.light_map[(x,y)] = 255
-		
-		return
+				self.light_map[(x,y)] = 25
 		
 		# cast light from each light entity
 		for entity in self.light_entities:
@@ -332,7 +337,6 @@ class Game:
 		self.entities.append(new_entity)
 		
 		self.player = new_entity
-	
 	
 	# try to move the player one cell in the given direction
 	def MovePlayer(self, x_dist, y_dist):

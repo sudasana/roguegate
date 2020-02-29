@@ -50,7 +50,72 @@ CONSOLE_COL_8 = libtcod.Color(64,48,0)
 
 
 
-##### General Drawing Functions ######
+##### Game Object - holds everything for a given game #####
+class Game:
+	def __init__(self):
+		
+		pass
+	
+	
+	# update the information console
+	def UpdateInfoCon(self):
+		libtcod.console_clear(info_con)
+		libtcod.console_print(info_con, 4, 1, '06-17-72')
+		libtcod.console_print(info_con, 4, 4, '...th Floor')
+	
+	
+	# update the game screen and blit to the root console
+	def UpdateScreen(self):
+		libtcod.console_clear(con)
+		
+		libtcod.console_blit(info_con, 0, 0, 0, 0, con, 0, 0)
+		
+		libtcod.console_set_default_foreground(con, CONSOLE_COL_3)
+		DrawVLine(con, 18, 0, 40, 179)
+		
+		libtcod.console_blit(con, 0, 0, 0, 0, 0, 0, 0)
+		
+	
+	# do the input loop for the active game
+	def DoInputLoop(self):
+		
+		global info_con, map_con
+		
+		# create the main screen consoles
+		info_con = NewConsole(18, 40, libtcod.black, CONSOLE_COL_2)
+		
+		# draw consoles and game screen for first time
+		self.UpdateInfoCon()
+		self.UpdateScreen()
+		
+		exit_loop = False
+		while not exit_loop:
+			
+			if libtcod.console_is_window_closed(): sys.exit()
+			libtcod.console_flush()
+			event = libtcod.sys_check_for_event(libtcod.EVENT_KEY_RELEASE|libtcod.EVENT_KEY_PRESS|libtcod.EVENT_MOUSE,
+				key, mouse)
+			
+			# TEMP - quit to main menu right away
+			if key.vk == libtcod.KEY_ESCAPE:
+				exit_loop = True
+				continue
+		
+
+
+
+##### General Functions ######
+
+# shortcut for generating consoles
+def NewConsole(x, y, bg, fg, key_colour=False):
+	new_con = libtcod.console_new(x, y)
+	libtcod.console_set_default_background(new_con, bg)
+	libtcod.console_set_default_foreground(new_con, fg)
+	if key_colour:
+		libtcod.console_set_key_color(new_con, KEY_COLOR)
+	libtcod.console_clear(new_con)
+	return new_con
+
 
 # draw a rectangle of the given character to the give console
 def DrawRect(console, x, y, w, h, char):
@@ -62,11 +127,17 @@ def DrawRect(console, x, y, w, h, char):
 		libtcod.console_put_char(con, x, y1, char)
 		libtcod.console_put_char(con, x+w, y1, char)
 
+
 # draw a vertical line of the given character
 def DrawVLine(console, x, y, h, char):
 	for y1 in range(y, y+h+1):
 		libtcod.console_put_char(con, x, y1, char)
 
+
+
+##########################################################################################
+#                                       Main Menu                                        #
+##########################################################################################
 
 # create mouse and key event holders
 mouse = libtcod.Mouse()
@@ -112,14 +183,21 @@ def DrawMainMenu():
 	# action keys
 	libtcod.console_set_default_foreground(con, CONSOLE_COL_1)
 	libtcod.console_put_char(con, 32, 28, 'N')
+	
+	# TEMP
+	libtcod.console_set_default_foreground(con, CONSOLE_COL_7)
 	libtcod.console_put_char(con, 32, 29, 'C')
 	libtcod.console_put_char(con, 32, 30, 'O')
+	libtcod.console_set_default_foreground(con, CONSOLE_COL_1)
 	libtcod.console_put_char(con, 32, 31, 'Q')
 	
 	libtcod.console_set_default_foreground(con, CONSOLE_COL_3)
 	libtcod.console_print(con, 36, 28, 'New Session')
+	# TEMP
+	libtcod.console_set_default_foreground(con, CONSOLE_COL_7)
 	libtcod.console_print(con, 36, 29, 'Continue Session')
 	libtcod.console_print(con, 36, 30, 'Options')
+	libtcod.console_set_default_foreground(con, CONSOLE_COL_1)
 	libtcod.console_print(con, 36, 31, 'Quit')
 	
 	libtcod.console_blit(con, 0, 0, 0, 0, 0, 0, 0)
@@ -137,7 +215,24 @@ while not exit_game:
 		key, mouse)
 	if event != libtcod.EVENT_KEY_PRESS: continue
 	
-	if key.vk == libtcod.KEY_ESCAPE:
+	key_char = chr(key.c).lower()
+	
+	if key_char == 'q':
 		exit_game = True
+		continue
+	
+	# New session
+	elif key_char == 'n':
+		
+		# create a new game object
+		game = Game()
+		
+		# start the input loop
+		game.DoInputLoop()
+		
+		# re-draw main menu
+		DrawMainMenu()
+		continue
+		
 
 # END #

@@ -52,6 +52,7 @@ CELL_NULL = 0						# not active, no interactions possible
 CELL_TILE = 1						# generic linoleum tile flooring
 CELL_WALL = 2						# solid concrete wall
 
+CELL_MARKER = 100					# a marker of some kind, used for debugging
 
 ##### BlockFloor Object - represents one floor of one block of the entire complex #####
 class BlockFloor():
@@ -61,28 +62,28 @@ class BlockFloor():
 		self.GenerateMap()
 	
 	# set a given cell to a cell type, ignores if not on map
-	def SetCell(self, x, y, new_type):
+	def SetCell(self, x, y, new_type, skip_replace, skip_floors):
 		if (x,y) not in self.char_map: return
-		
-		# if a floor cell has already been set here, don't cover it with a wall
-		if self.char_map[(x,y)] == CELL_TILE and new_type == CELL_WALL: return
-		
+		if skip_floors and self.char_map[(x,y)] == CELL_TILE: return
+		if skip_replace and self.char_map[(x,y)] != CELL_NULL: return
 		self.char_map[(x,y)] = new_type
 	
 	# generate or re-generate the map, 61x40
 	def GenerateMap(self):
 		
 		# create a room: h, w is the floor space, with one extra layer of walls
-		def AddRoom(x1, y1, w, h):
-			for x in range(x1, x1+w+1):
+		def AddRoom(x1, y1, w, h, skip_replace=False, skip_floors=False):
+			for x in range(x1, x1+w):
 				for y in range(y1, y1+h):
-					self.SetCell(x, y, CELL_TILE)
-			for x in range(x1, x1+w+1):
-				self.SetCell(x, y1-1, CELL_WALL)
-				self.SetCell(x, y1+h, CELL_WALL)
+					self.SetCell(x, y, CELL_TILE, skip_replace, skip_floors)
+			# horizontal walls
+			for x in range(x1, x1+w):
+				self.SetCell(x, y1-1, CELL_WALL, skip_replace, skip_floors)
+				self.SetCell(x, y1+h, CELL_WALL, skip_replace, skip_floors)
+			# vertical walls
 			for y in range(y1-1, y1+h+1):
-				self.SetCell(x1-1, y, CELL_WALL)
-				self.SetCell(x1+w+1, y, CELL_WALL)
+				self.SetCell(x1-1, y, CELL_WALL, skip_replace, skip_floors)
+				self.SetCell(x1+w, y, CELL_WALL, skip_replace, skip_floors)
 		
 		# character map - one for each possible map cell
 		# set all cells to null to start
@@ -92,18 +93,58 @@ class BlockFloor():
 				self.char_map[(x,y)] = CELL_NULL
 		
 		# set a main horizontal hallway to start
-		x1 = libtcod.random_get_int(0, 2, 6)
-		y1 = libtcod.random_get_int(0, 8, 30)
-		w = libtcod.random_get_int(0, 53, 59) - x1
-		AddRoom(x1, y1, w, 3)
-		
+		hx1 = libtcod.random_get_int(0, 2, 6)
+		hy1 = libtcod.random_get_int(0, 8, 30)
+		hw = libtcod.random_get_int(0, 53, 59) - hx1
+		AddRoom(hx1, hy1, hw, 3)
 		
 		# set up a vertical hallway
-		x1 = libtcod.random_get_int(0, 12, 50)
-		y1 = libtcod.random_get_int(0, 4, 8)
-		h = libtcod.random_get_int(0, 30, 38) - y1
-		AddRoom(x1, y1, 3, h)
+		vx1 = libtcod.random_get_int(0, 12, 50)
+		vy1 = libtcod.random_get_int(0, 4, 8)
+		vh = libtcod.random_get_int(0, 30, 38) - vy1
+		AddRoom(vx1, vy1, 3, vh, skip_floors=True)
 		
+		# determine the height of the rooms off the horizontal hallway
+		room_height_upper = libtcod.random_get_int(0, 2, 4) + libtcod.random_get_int(0, 2, 4)
+		room_height_lower = libtcod.random_get_int(0, 2, 4) + libtcod.random_get_int(0, 2, 4)
+		
+		# adjust in case they would go off the map
+		if hy1-1-room_height_upper <= 0:
+			room_height_upper = hy1-2
+		if hy1+3+room_height_lower >= 40:
+			room_height_lower = 40-hy1-4
+		
+		AddRoom(hx1, hy1-1-room_height_upper, hw, room_height_upper, skip_replace=True)
+		AddRoom(hx1, hy1+3, hw, room_height_lower, skip_replace=True)
+		
+		# do the same for the vertical hallway
+		# determine the width of the rooms off the vertical hallway
+		room_width_left = libtcod.random_get_int(0, 2, 4) + libtcod.random_get_int(0, 2, 4)
+		room_width_right = libtcod.random_get_int(0, 2, 4) + libtcod.random_get_int(0, 2, 4)
+		
+		# adjust in case they would go off the map
+		if vx1-1-room_width_left < 0:
+			room_width_left = vx1-1
+		if vx1+3+room_width_right > 60:
+			room_width_right = 60-vx1-3
+		
+		# adjust in case they would end up being too close to horizontal hallway rooms
+		if -2 < hx1 - (vx1-1-room_width_left) < 2:
+			room_width_left = vx1 - hx1 - 1
+		
+		AddRoom(vx1-1-room_width_left, vy1, room_width_left, vh, skip_replace=True)
+		AddRoom(vx1+3, vy1, room_width_right, vh, skip_replace=True)
+		
+		# define rooms within areas off of hallways
+		
+		room_corners = [
+			(hx1, hy1 - room_height_upper - 1), (vx1+4, hy1 - room_height_upper - 1),
+			(hx1, hy1+4), (vx1+4, hy1+4)
+		]
+		
+		# TEMP testing
+		for (x, y) in room_corners:
+			self.SetCell(x, y, CELL_MARKER, False, False)
 
 
 ##### Game Object - holds everything for a given game #####
@@ -138,6 +179,11 @@ class Game:
 				elif floor_cell == CELL_WALL:
 					libtcod.console_put_char_ex(map_con, x, y, 178,
 						CONSOLE_COL_4, libtcod.black)
+				
+				# Debug cell type
+				elif floor_cell == CELL_MARKER:
+					libtcod.console_put_char_ex(map_con, x, y, 254,
+						CONSOLE_COL_1, libtcod.black)
 				
 	
 	

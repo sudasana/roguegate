@@ -138,13 +138,45 @@ class BlockFloor():
 		# define rooms within areas off of hallways
 		
 		room_corners = [
-			(hx1, hy1 - room_height_upper - 1), (vx1+4, hy1 - room_height_upper - 1),
-			(hx1, hy1+4), (vx1+4, hy1+4)
+			(hx1, hy1 - room_height_upper - 1)#, (vx1+4, hy1 - room_height_upper - 1),
+			#(hx1, hy1+4), (vx1+4, hy1+4)
 		]
 		
-		# TEMP testing
 		for (x, y) in room_corners:
+			
+			# TEMP testing
 			self.SetCell(x, y, CELL_MARKER, False, False)
+			print('Room corner is ' + str(x) + ',' + str(y))
+			
+			# walk through the room and determine the maximum area
+			room_height = 0
+			room_width = 0
+			for x1 in range(x, 61):
+				
+				# room width has been found
+				if room_width > 0:
+					break
+				
+				for y1 in range(y, 40):
+					
+					if self.char_map[(x1,y1)] != CELL_WALL: continue
+					
+					# hit a wall, but room height not set yet
+					# set the height and continue
+					if room_height == 0:
+						room_height = y1-y
+						break
+					
+					# hit a wall, but might just be the bottom wall
+					if y1 == y+room_height: break
+					
+					# hit a wall before the room height, room is finished
+					room_width = x1-x
+					break
+			
+			# TODO: see if room can be broken up
+			
+						
 
 
 ##### Game Object - holds everything for a given game #####

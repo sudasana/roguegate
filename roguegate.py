@@ -56,17 +56,27 @@ CELL_WALL = 2						# solid concrete wall
 ##### BlockFloor Object - represents one floor of one block of the entire complex #####
 class BlockFloor():
 	def __init__(self):
+		
+		# generate the map for this block-floor
+		self.GenerateMap()
 	
+	# generate or re-generate the map, 61x40
+	def GenerateMap(self):
+		
 		# character map - one for each possible map cell
+		# set all cells to null to start
 		self.char_map = {}
 		for x in range(61):
 			for y in range(40):
-				# set all cells to null to start
 				self.char_map[(x,y)] = CELL_NULL
-				
-				# TEMP testing
+		
+		# set a main horizontal hallway to start
+		x1 = libtcod.random_get_int(0, 4, 8)
+		y1 = libtcod.random_get_int(0, 8, 30)
+		w = libtcod.random_get_int(0, 53, 59) - x1
+		for x in range(x1, x1+w+1):
+			for y in range(y1, y1+3):
 				self.char_map[(x,y)] = CELL_TILE
-	
 
 
 
@@ -134,12 +144,20 @@ class Game:
 			
 			if libtcod.console_is_window_closed(): sys.exit()
 			libtcod.console_flush()
-			event = libtcod.sys_check_for_event(libtcod.EVENT_KEY_RELEASE|libtcod.EVENT_KEY_PRESS|libtcod.EVENT_MOUSE,
-				key, mouse)
+			if not GetInputEvent(): continue
 			
 			# TEMP - quit to main menu right away
 			if key.vk == libtcod.KEY_ESCAPE:
 				exit_loop = True
+				continue
+			
+			key_char = chr(key.c).lower()
+			
+			# DEBUG - regenerate the block-floor map
+			if key_char == 'g':
+				self.block_floor.GenerateMap()
+				self.UpdateMapCon()
+				self.UpdateScreen()
 				continue
 		
 
@@ -175,10 +193,38 @@ def DrawVLine(console, x, y, h, char):
 		libtcod.console_put_char(con, x, y1, char)
 
 
+# get keyboard and/or mouse event; returns False if no new key press
+def GetInputEvent():
+	global key_down
+	event = libtcod.sys_check_for_event(libtcod.EVENT_KEY_RELEASE|libtcod.EVENT_KEY_PRESS|libtcod.EVENT_MOUSE,
+		key, mouse)
+	if key_down:
+		if event != libtcod.EVENT_KEY_RELEASE:
+			return False
+		key_down = False
+	if event != libtcod.EVENT_KEY_PRESS:
+		return False
+	key_down = True
+	return True
+
+
+# clear all keyboard events
+def FlushKeyboardEvents():
+	global key_down
+	exit = False
+	while not exit:
+		libtcod.console_flush()
+		event = libtcod.sys_check_for_event(libtcod.EVENT_KEY_PRESS, key, mouse)
+		if event != libtcod.EVENT_KEY_PRESS: exit = True
+	key_down = False
+
 
 ##########################################################################################
 #                                       Main Menu                                        #
 ##########################################################################################
+
+global key_down
+key_down = False
 
 # create mouse and key event holders
 mouse = libtcod.Mouse()
@@ -252,9 +298,7 @@ exit_game = False
 while not exit_game:
 	if libtcod.console_is_window_closed(): sys.exit()
 	libtcod.console_flush()
-	event = libtcod.sys_check_for_event(libtcod.EVENT_KEY_RELEASE|libtcod.EVENT_KEY_PRESS|libtcod.EVENT_MOUSE,
-		key, mouse)
-	if event != libtcod.EVENT_KEY_PRESS: continue
+	if not GetInputEvent(): continue
 	
 	key_char = chr(key.c).lower()
 	

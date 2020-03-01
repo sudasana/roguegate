@@ -381,9 +381,24 @@ class Game:
 			libtcod.console_set_default_foreground(con, CONSOLE_COL_3)
 			DrawBox(con, 8, 4, 64, 32)
 			
-			libtcod.console_set_default_foreground(con, CONSOLE_COL_4)
+			libtcod.console_set_default_foreground(con, CONSOLE_COL_2)
 			libtcod.console_print_ex(con, WINDOW_XM, 6, libtcod.BKGND_NONE, libtcod.CENTER,
 				'RogueGate Building Map')
+			libtcod.console_set_default_foreground(con, CONSOLE_COL_3)
+			# TEMP - static
+			libtcod.console_print_ex(con, WINDOW_XM, 8, libtcod.BKGND_NONE, libtcod.CENTER,
+				'Ground Floor')
+			
+			# TEMP - display empty blocks
+			libtcod.console_set_default_foreground(con, CONSOLE_COL_7)
+			for x in range(5):
+				for y in range(3):
+					DrawRect(con, 16+(x*10), 11+(y*7), 7, 4, 176)
+					
+					
+						
+						
+			
 			
 			libtcod.console_set_default_foreground(con, CONSOLE_COL_1)
 			libtcod.console_print(con, 32, 33, 'Esc')

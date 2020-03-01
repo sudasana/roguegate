@@ -57,11 +57,24 @@ CELL_DOOR = 3						# door, further info stored in the doors list
 
 CELL_MARKER = 100					# a marker of some kind, used for debugging
 
+BLOCK_LINKS = [(0,-1), (1,0), (0,1), (-1,0)]		# list of directions for links to adjacent blocks
+
+
+
 ##### BlockFloor Object - represents one floor of one block of the entire complex #####
 class BlockFloor():
-	def __init__(self):
+	def __init__(self, outdoor=False):
 		
+		self.outdoor=outdoor			# block is only the ground floor of an outdoor area
 		self.letter = ''			# block letter, A-
+		
+		self.links = {				# links to adjacent blocks
+			(0,-1): False,
+			(1,0): False,
+			(0,1): False,
+			(-1,0): False
+		}
+		
 		self.char_map = {}			# map of cells
 		self.center_point = (0,0)
 		self.rooms = []				# list of rooms in (x,y,w,h) format
@@ -121,6 +134,19 @@ class BlockFloor():
 		# clear list of rooms, light entities
 		self.rooms = []
 		self.light_entities = []
+		
+		# outdoor blocks are set up differently
+		if self.outdoor:
+			for x in range(61):
+				for y in range(40):
+					self.char_map[(x,y)] = CELL_TILE
+			self.center_point = (30, 20)
+			for x in range(10, 51, 10):
+				self.AddLight(x, 20, 5)
+			for y in range(10, 31, 10):
+				if y == 20: continue
+				self.AddLight(30, y, 5)
+			return
 		
 		# set a main horizontal hallway to start
 		hx1 = libtcod.random_get_int(0, 2, 6)
@@ -338,7 +364,7 @@ class Game:
 		self.GenerateBlocks()
 		
 		# TEMP - only one block-floor to start
-		self.block_floor = BlockFloor()
+		self.block_floor = BlockFloor(outdoor=True)
 		
 		# create player object
 		new_entity = Entity()
@@ -378,6 +404,8 @@ class Game:
 				if libtcod.random_get_int(0, 1, 100) <= chance:
 					self.block_map[(x,y)] = BlockFloor()
 					total_blocks += 1
+				else:
+					self.block_map[(x,y)] = BlockFloor(outdoor=True)
 			
 			# apply block number restrictions
 			if total_blocks <= 7 or total_blocks >= 11:
@@ -385,13 +413,21 @@ class Game:
 			else: 
 				break
 		
-		# apply letters to blocks
+		# apply letters to blocks and link blocks to adjacent ones
 		i = 0
 		for y in range(3):
 			for x in range(5):
-				if self.block_map[(x,y)] is not None:
+				if not self.block_map[(x,y)].outdoor:
 					self.block_map[(x,y)].letter = chr(i+65)
 					i += 1
+				
+				# check for links
+				for (xm, ym) in BLOCK_LINKS:
+					if (x+xm, y+ym) in self.block_map:
+						self.block_map[(x,y)].links[(xm,ym)] = True
+		
+		
+		
 					
 		
 	
@@ -436,14 +472,47 @@ class Game:
 				'Ground Floor')
 			
 			# display blocks
-			libtcod.console_set_default_foreground(con, CONSOLE_COL_3)
 			for x in range(5):
 				for y in range(3):
 					
-					if self.block_map[(x,y)] is not None:
+					# outdoor area
+					if self.block_map[(x,y)].outdoor:
+						libtcod.console_set_default_foreground(con, CONSOLE_COL_7)
+						DrawRect(con, 16+(x*10), 11+(y*7), 7, 4, 176)
+					
+					# regular building
+					else:
+						libtcod.console_set_default_foreground(con, CONSOLE_COL_3)
 						DrawBox(con, 16+(x*10), 11+(y*7), 8, 5)
-						libtcod.console_print(con, 19+(x*10), 13+(y*7),
+						libtcod.console_print(con, 19+(x*10), 12+(y*7),
 							self.block_map[(x,y)].letter)
+					
+					# future: indicate if player in currently in this block
+					
+					# display links to adjacent blocks
+					libtcod.console_set_default_foreground(con, CONSOLE_COL_3)
+					for (xm, ym) in BLOCK_LINKS:
+						if self.block_map[(x,y)].links[(xm, ym)] is True:
+							
+							# vertical link
+							if xm == 0:
+								char = 186
+								x1 = 19+(x*10)
+								if ym == -1:
+									y1 = 10+(y*7)
+								else:
+									y1 = 16+(y*7)
+							
+							# horizontal link
+							else:
+								char = 205
+								y1 = 13+(y*7)
+								if xm == -1:
+									x1 = 15+(x*10)
+								else:
+									x1 = 24+(x*10)
+							
+							libtcod.console_put_char(con, x1, y1, char)
 			
 			libtcod.console_set_default_foreground(con, CONSOLE_COL_1)
 			libtcod.console_print(con, 32, 33, 'Esc')
@@ -521,7 +590,7 @@ class Game:
 					continue
 				elif cell == CELL_TILE:
 					char = 250
-					col = CONSOLE_COL_8
+					col = CONSOLE_COL_7
 				elif cell == CELL_WALL:
 					char = 178
 					col = CONSOLE_COL_4

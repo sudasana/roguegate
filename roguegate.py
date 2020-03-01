@@ -28,6 +28,7 @@ import libtcodpy as libtcod
 import shelve						# saving and loading games
 from random import choice, shuffle
 from math import sqrt
+from copy import deepcopy
 
 
 ##### Constants #####
@@ -174,7 +175,7 @@ class BlockFloor():
 	def __init__(self, floor, outdoor=False):
 		
 		self.floor = floor
-		self.outdoor=outdoor			# block is only the ground floor of an outdoor area
+		self.outdoor = outdoor			# block is only the ground floor of an outdoor area
 		self.letter = ''			# block letter, A-
 		
 		self.links = {				# links to adjacent blocks
@@ -391,7 +392,8 @@ class BlockFloor():
 			(x1, y1) = choice(possible_door_cells)
 			self.SetCell(x1, y1, CELL_DOOR, False, False)
 		
-	# generate links cells for this block to adjacent ones
+		
+	# generate link cells for this block to adjacent ones
 	def GenerateLinks(self):
 		for (xm, ym) in BLOCK_LINKS:
 			
@@ -645,16 +647,16 @@ class Game:
 		self.active_block = self.player.block
 	
 	
-	# warp the player to the center of the given block
+	# warp the player to the ground floor, center of the given block
 	def MovePlayerToBlock(self, block_letter):
 		for x in range(5):
 			for y in range(3):
-				for block in self.block_map[(x,y)]:
-					if block.letter == block_letter:
-						self.player.block = block
-						self.player.location = block.center_point
-						self.player.facing = (0,1)
-						return
+				block = self.block_map[(x,y)][0]
+				if block.letter == block_letter:
+					self.player.block = block
+					self.player.location = block.center_point
+					self.player.facing = (0,1)
+					return
 	
 	
 	# generate a series of building blocks for the complex
@@ -690,33 +692,54 @@ class Game:
 					self.block_map[(x,y)].append(BlockFloor(0, outdoor=True))
 			
 			# apply block number restrictions
-			if total_blocks <= 7 or total_blocks >= 11:
+			if total_blocks <= 9 or total_blocks >= 13:
 				continue
 			else: 
 				break
 		
-		
-		
-		
-		# apply letters to blocks and link blocks to adjacent ones
+		# apply letters and check for upper floor generation
 		i = 0
+		for y in range(3):
+			for x in range(5):
+				if self.block_map[(x,y)][0].outdoor: continue
+				
+				self.block_map[(x,y)][0].letter = chr(i+65)
+				
+				# possible 2nd, 3rd, and 4th floor
+				for f in range(1, 5):
+					
+					# roll to break here
+					if libtcod.random_get_int(0, 1, 100) <= f*10:
+						break
+				
+					block_floor = deepcopy(self.block_map[(x,y)][0])
+					block_floor.floor = f
+					block_floor.letter = chr(i+65)
+					self.block_map[(x,y)].append(block_floor)
+				
+				# increase block letter
+				i += 1
+		
+		# run through each block, apply letters and check for links
+		
 		for y in range(3):
 			for x in range(5):
 				
 				for block in self.block_map[(x,y)]:
 					
-					if not block.outdoor:
-						block.letter = chr(i+65)
-						i += 1
-			
-					# check for links to be made
+					# link blocks to adjacent ones
 					for (xm, ym) in BLOCK_LINKS:
-						if (x+xm, y+ym) in self.block_map:
-							block_list = self.block_map[(x+xm,y+ym)]
-							
-							# adjacent floor exists, link to it
-							if len(block_list) > block.floor:
-								block.links[(xm,ym)] = block_list[block.floor]
+						
+						if (x+xm,y+ym) not in self.block_map:
+							continue
+						
+						block_list = self.block_map[(x+xm,y+ym)]
+						
+						# adjacent floor exists, link to it
+						if len(block_list) > block.floor:
+							block.links[(xm,ym)] = block_list[block.floor]
+				
+				
 		
 		
 	# try to move the player one cell in the given direction
@@ -746,10 +769,10 @@ class Game:
 			# check for leaving the play area
 			if self.active_block.char_map[(x+x_dist,y+y_dist)] == CELL_NULL: return
 			
-			# if play is not yet facing this rdirection, rotate them but don't move them
+			# if play is not yet facing this rdirection, rotate them
 			if self.player.facing != (x_dist, y_dist):
 				self.player.facing = (x_dist, y_dist)
-				return
+				#return
 			
 			# move the player
 			self.player.location = (x+x_dist, y+y_dist)

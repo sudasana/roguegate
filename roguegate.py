@@ -717,11 +717,15 @@ class Game:
 					block_floor.letter = chr(i+65)
 					self.block_map[(x,y)].append(block_floor)
 				
+				# TODO: add stair and elevator connections here
+				if len(self.block_map[(x,y)]) > 1:
+					pass
+				
+				
 				# increase block letter
 				i += 1
 		
 		# run through each block, apply letters and check for links
-		
 		for y in range(3):
 			for x in range(5):
 				
@@ -799,7 +803,6 @@ class Game:
 					self.player.location = self.active_block.link_locations[(xm, ym)]
 					
 					return True
-		
 		
 		return False
 	
@@ -905,7 +908,6 @@ class Game:
 			# exit map view
 			if key_char == 'm':
 				exit_loop = True
-				continue
 			
 			# change displayed floor
 			elif key_char in ['w', 's']:
@@ -916,22 +918,7 @@ class Game:
 				else:
 					continue
 				UpdateMap(display_floor)
-				continue
-			
-			# DEBUG - regenerate block map
-			elif key_char == 'g':
-				self.GenerateBlocks()
-				self.MovePlayerToBlock('A')
-				self.active_block = self.player.block
-				self.active_block.GenerateVisMap()
-				self.active_block.GenerateLightMap()
-				self.UpdateMapCon()
-				self.UpdateEntityCon()
-				UpdateMap(display_floor)
-				SaveGame()
-				continue
-		
-		pass
+
 	
 	# update the information console, 18x40
 	def UpdateInfoCon(self):
@@ -1090,7 +1077,6 @@ class Game:
 				self.UpdateEntityCon()
 				self.UpdateScreen()
 				SaveGame()
-
 				continue
 			
 			# link to new block
@@ -1109,18 +1095,6 @@ class Game:
 			elif key_char == 'm':
 				self.ViewMap()
 				self.UpdateScreen()
-				continue
-			
-			# DEBUG - regenerate the block-floor map
-			elif key_char == 'g':
-				self.active_block.GenerateMap()
-				self.active_block.GenerateLinks()
-				self.player.location = self.active_block.center_point	# move the player too
-				self.active_block.GenerateLightMap()
-				self.UpdateMapCon()
-				self.UpdateEntityCon()
-				self.UpdateScreen()
-				SaveGame()
 				continue
 			
 			# unrecognized command, flush it
@@ -1234,7 +1208,8 @@ libtcod.console_set_custom_font('cp437_16x16.png', libtcod.FONT_LAYOUT_ASCII_INR
 root_console = libtcod.console_init_root(WINDOW_WIDTH, WINDOW_HEIGHT, title=NAME + ' ' + VERSION,
 	order='F')
 libtcod.sys_set_fps(LIMIT_FPS)
-
+libtcod.console_set_default_background(0, libtcod.black)
+libtcod.console_set_default_foreground(0, CONSOLE_COL_2)
 
 # create double buffer console
 con = libtcod.console_new(WINDOW_WIDTH, WINDOW_HEIGHT)
@@ -1314,6 +1289,12 @@ while not exit_game:
 	
 	# New session
 	elif key_char == 'n':
+		
+		# show loading screen, since generating the game object can take some time
+		libtcod.console_clear(0)
+		libtcod.console_print_ex(0, WINDOW_XM, WINDOW_YM-2, libtcod.BKGND_NONE,
+			libtcod.CENTER, 'Loading...')
+		libtcod.console_flush()
 		
 		# create a new game object
 		game = Game()

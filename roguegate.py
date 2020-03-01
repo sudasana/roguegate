@@ -47,7 +47,7 @@ CONSOLE_COL_4 = libtcod.Color(217,163,0)
 CONSOLE_COL_5 = libtcod.Color(178,134,0)
 CONSOLE_COL_6 = libtcod.Color(140,105,0)
 CONSOLE_COL_7 = libtcod.Color(102,77,0)
-CONSOLE_COL_8 = libtcod.Color(64,48,0)
+CONSOLE_COL_8 = libtcod.Color(16,12,0)			# dark background colour
 
 ##### Map Cell Type Definitions #####
 CELL_NULL = 0						# not active, no interactions possible
@@ -332,6 +332,12 @@ class Game:
 		# list of entities in the world
 		self.entities = []
 		
+		# building blocks within the complex, 5x3 possible locations
+		self.block_map = {}
+		for x in range(5):
+			for y in range(3):
+				self.block_map[(x,y)] = None
+		
 		# TEMP - only one block-floor to start
 		self.block_floor = BlockFloor()
 		
@@ -363,6 +369,45 @@ class Game:
 		self.player.location = (x,y)
 		return True
 	
+	
+	# display the building block map
+	def ViewMap(self):
+		
+		# update the map display
+		def UpdateMap():
+			libtcod.console_set_default_background(con, CONSOLE_COL_8)
+			libtcod.console_rect(con, 8, 4, 64, 32, True, libtcod.BKGND_SET)
+			libtcod.console_set_default_background(con, libtcod.black)
+			libtcod.console_set_default_foreground(con, CONSOLE_COL_3)
+			DrawBox(con, 8, 4, 64, 32)
+			
+			libtcod.console_set_default_foreground(con, CONSOLE_COL_4)
+			libtcod.console_print_ex(con, WINDOW_XM, 6, libtcod.BKGND_NONE, libtcod.CENTER,
+				'RogueGate Building Map')
+			
+			libtcod.console_set_default_foreground(con, CONSOLE_COL_1)
+			libtcod.console_print(con, 32, 33, 'Esc')
+			libtcod.console_set_default_foreground(con, CONSOLE_COL_3)
+			libtcod.console_print(con, 37, 33, 'Close Map')
+			
+			libtcod.console_blit(con, 0, 0, 0, 0, 0, 0, 0)
+		
+		
+		# display the map for the first time
+		UpdateMap()
+		
+		# wait for player input
+		exit_loop = False
+		while not exit_loop:
+			if libtcod.console_is_window_closed(): sys.exit()
+			libtcod.console_flush()
+			if not GetInputEvent(): continue
+			
+			if key.vk == libtcod.KEY_ESCAPE:
+				exit_loop = True
+				continue
+		
+		pass
 	
 	# update the information console, 18x40
 	def UpdateInfoCon(self):
@@ -508,8 +553,14 @@ class Game:
 				
 				continue
 			
+			# view building block map
+			elif key_char == 'm':
+				self.ViewMap()
+				self.UpdateScreen()
+				continue
+			
 			# DEBUG - regenerate the block-floor map
-			if key_char == 'g':
+			elif key_char == 'g':
 				self.block_floor.GenerateMap()
 				self.player.location = self.block_floor.center_point	# move the player too
 				self.block_floor.GenerateLightMap()
@@ -564,6 +615,20 @@ def DrawRect(console, x, y, w, h, char):
 	for y1 in range(y+1, y+h):
 		libtcod.console_put_char(con, x, y1, char)
 		libtcod.console_put_char(con, x+w, y1, char)
+
+
+# draw a box of single lines with corners
+def DrawBox(console, x, y, w, h):
+	for x1 in range(x+1, x+w-1):
+		libtcod.console_put_char(console, x1, y, 196)
+		libtcod.console_put_char(console, x1, y+h-1, 196)
+	for y1 in range(y+1, y+h-1):
+		libtcod.console_put_char(console, x, y1, 179)
+		libtcod.console_put_char(console, x+w-1, y1, 179)
+	libtcod.console_put_char(con, x, y, 218)
+	libtcod.console_put_char(con, x+w-1, y, 191)
+	libtcod.console_put_char(con, x, y+h-1, 192)
+	libtcod.console_put_char(con, x+w-1, y+h-1, 217)
 
 
 # draw a vertical line of the given character

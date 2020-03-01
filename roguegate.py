@@ -485,6 +485,7 @@ class BlockFloor():
 			for y in range(40):
 				self.light_map[(x,y)] = 25
 		
+		# cast static lights
 		for entity in self.light_entities:
 			(x, y) = entity.location
 			Raycast(x, y, entity.light_radius)
@@ -495,13 +496,85 @@ class BlockFloor():
 
 
 	# generate the player visibility map for this block, store info in game object
+	# uses recursive shadowcasting, based on:
+	# http://www.roguebasin.com/index.php?title=Python_shadowcasting_implementation
 	def GenerateVisMap(self):
 		
-		# TEMP
+		# Multipliers for transforming coordinates to other octants:
+		MULT = [
+			[1,  0,  0, -1, -1,  0,  0,  1],
+			[0,  1, -1,  0,  0, -1,  1,  0],
+			[0,  1,  1,  0,  0, -1, -1,  0],
+			[1,  0,  0,  1, -1,  0,  0, -1]
+		]
+		
+		# shadowcasting function
+		def ShadowCast(cx, cy, row, start, end, radius, xx, xy, yx, yy, id):
+			
+			def IsBlocked(x, y):
+				return (x < 0 or y < 0
+					or x >= 61 or y >= 40
+					or self.GetCell(x, y) in [CELL_WALL, CELL_DOOR])
+			
+			if start < end: return
+			
+			radius_squared = radius * radius
+			
+			for j in range(row, radius+1):
+				dx, dy = -j-1, -j
+				blocked = False
+				while dx <= 0:
+					dx += 1
+				
+					# translate the dx, dy coordinates into map coordinates
+					mx, my = cx + dx * xx + dy * xy, cy + dx * yx + dy * yy
+					
+					# l_slope and r_slope store the slopes of the left and right
+					# extremities of the square we're considering
+					l_slope, r_slope = (dx-0.5)/(dy+0.5), (dx+0.5)/(dy-0.5)
+					
+					if start < r_slope:
+						continue
+					elif end > l_slope:
+						break
+					else:
+						# ray is touching this square, set it as visible
+						if dx*dx + dy*dy < radius_squared:
+							game.vis_map[(mx,my)] = True
+						
+						if blocked:
+							
+							# we're scanning a row of blocked squares
+							if IsBlocked(mx, my):
+								new_start = r_slope
+								continue
+							else:
+								blocked = False
+								start = new_start
+						
+						else:
+							if IsBlocked(mx, my) and j < radius:
+								blocked = True
+								ShadowCast(cx, cy, j+1, start, l_slope,
+									radius, xx, xy, yx, yy, id+1)
+								new_start = r_slope
+			
+				# Row is scanned; do next row unless last square was blocked
+				if blocked:
+					break
+
+		
 		# clear current vis map
 		for x in range(61):
 			for y in range(40):
-				game.vis_map[(x,y)] = True
+				game.vis_map[(x,y)] = False
+		
+		# cast in all 8 octants
+		(x,y) = game.player.location
+		for octant in range(8):
+			ShadowCast(x, y, 1, 1.0, 0.0, 100,
+                             MULT[0][octant], MULT[1][octant],
+                             MULT[2][octant], MULT[3][octant], 0)
 		
 	
 

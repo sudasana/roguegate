@@ -192,6 +192,11 @@ class BlockFloor():
 			(-1,0): None
 		}
 		
+		self.vertical_links = {			# links to adjacent floors in same block
+			-1: None,
+			1: None
+		}
+		
 		self.char_map = {}			# map of cells
 		self.center_point = (0,0)
 		self.rooms = []				# list of rooms in (x,y,w,h) format
@@ -742,7 +747,12 @@ class Game:
 						# adjacent floor exists, link to it
 						if len(block_list) > block.floor:
 							block.links[(xm,ym)] = block_list[block.floor]
-				
+					
+					# link floors to vertically adjacent ones
+					if block.floor < len(self.block_map[(x,y)])-1:
+						block.vertical_links[1] = self.block_map[(x,y)][block.floor+1]
+					if block.floor > 0:
+						block.vertical_links[-1] = self.block_map[(x,y)][block.floor-1]
 				
 		
 		
@@ -797,14 +807,30 @@ class Game:
 					self.active_block = self.player.block
 					
 					# place them at the corresponding link location in the new block
-					xm = 0 - xm
-					ym = 0 - ym
-					
-					self.player.location = self.active_block.link_locations[(xm, ym)]
+					self.player.location = self.active_block.link_locations[(0-xm, 0-ym)]
 					
 					return True
 		
 		return False
+	
+	
+	# player is trying to go up or down stairs
+	def PlayerTakesStairs(self, upward):
+		
+		# see if there is a link here
+		if upward:
+			fm = -1
+		else:
+			fm = 1
+		
+		# no vertical link there
+		if self.player.block.vertical_links[fm] is None: return False
+		
+		# move up/down
+		self.player.block = self.player.block.vertical_links[fm]
+		self.active_block = self.player.block
+		
+		return True
 	
 	
 	# display the building block map
@@ -949,14 +975,16 @@ class Game:
 		libtcod.console_set_default_foreground(info_con, CONSOLE_COL_1)
 		libtcod.console_print(info_con, 2, 32, 'WASD')
 		libtcod.console_print(info_con, 1, 33, '+Shft')
-		libtcod.console_print(info_con, 4, 34, 'E')
-		libtcod.console_print(info_con, 4, 35, 'M')
+		libtcod.console_print(info_con, 3, 34, '</>')
+		libtcod.console_print(info_con, 4, 35, 'E')
+		libtcod.console_print(info_con, 4, 36, 'M')
 		
 		libtcod.console_set_default_foreground(info_con, CONSOLE_COL_3)
 		libtcod.console_print(info_con, 8, 32, 'Move')
 		libtcod.console_print(info_con, 8, 33, 'Run')
-		libtcod.console_print(info_con, 8, 34, 'Enter')
-		libtcod.console_print(info_con, 8, 35, 'Map')
+		libtcod.console_print(info_con, 8, 34, 'Up/Down')
+		libtcod.console_print(info_con, 8, 35, 'Enter')
+		libtcod.console_print(info_con, 8, 36, 'Map')
 		
 	
 	
@@ -1077,6 +1105,18 @@ class Game:
 				self.UpdateEntityCon()
 				self.UpdateScreen()
 				SaveGame()
+				continue
+			
+			# try to move up or down floors
+			elif key_char in [',', '.']:
+				if self.PlayerTakesStairs(key_char == ','):
+					self.active_block.GenerateVisMap()
+					self.active_block.GenerateLightMap()
+					self.UpdateInfoCon()
+					self.UpdateMapCon()
+					self.UpdateEntityCon()
+					self.UpdateScreen()
+					SaveGame()
 				continue
 			
 			# link to new block
@@ -1299,7 +1339,7 @@ while not exit_game:
 		# create a new game object
 		game = Game()
 		
-		# generate the visibility and light maps for the block-floor
+		# generate the initial visibility and light maps for the active block-floor
 		game.active_block.GenerateVisMap()
 		game.active_block.GenerateLightMap()
 		

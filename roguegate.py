@@ -329,6 +329,7 @@ class BlockFloor():
 class Entity:
 	def __init__(self):
 		self.is_player = False
+		self.block = None		# pointer to block location
 		self.location = (0,0)		# current location in the world
 		self.light_radius = 0		# entity emits light ot his radius
 	
@@ -363,16 +364,27 @@ class Game:
 		self.block_map = {}
 		self.GenerateBlocks()
 		
-		# TEMP - only one block-floor to start
-		self.block_floor = BlockFloor(outdoor=True)
+		self.active_block = None			# current block in viewport
 		
 		# create player object
 		new_entity = Entity()
 		new_entity.is_player = True
-		new_entity.location = self.block_floor.center_point
 		self.entities.append(new_entity)
-		
 		self.player = new_entity
+		
+		# put player in block A to start and move viewport to there
+		self.MovePlayerToBlock('A')
+		self.active_block = self.player.block
+	
+	
+	# move the player to the center of the given block
+	def MovePlayerToBlock(self, block_letter):
+		for x in range(5):
+			for y in range(3):
+				if self.block_map[(x,y)].letter == block_letter:
+					self.player.block = self.block_map[(x,y)]
+					self.player.location = self.block_map[(x,y)].center_point
+					return
 	
 	
 	# generate a series of building blocks for the complex
@@ -427,10 +439,6 @@ class Game:
 						self.block_map[(x,y)].links[(xm,ym)] = True
 		
 		
-		
-					
-		
-	
 	# try to move the player one cell in the given direction
 	def MovePlayer(self, x_dist, y_dist):
 		
@@ -443,7 +451,7 @@ class Game:
 			return False
 		
 		# check for wall blocking
-		if self.block_floor.char_map[(x+x_dist,y+y_dist)] == CELL_WALL: return False
+		if self.active_block.char_map[(x+x_dist,y+y_dist)] == CELL_WALL: return False
 		
 		x = x+x_dist
 		y = y+y_dist
@@ -461,7 +469,7 @@ class Game:
 			libtcod.console_rect(con, 8, 4, 64, 32, True, libtcod.BKGND_SET)
 			libtcod.console_set_default_background(con, libtcod.black)
 			libtcod.console_set_default_foreground(con, CONSOLE_COL_3)
-			DrawBox(con, 8, 4, 64, 32)
+			DrawBox(con, 8, 4, 63, 31)
 			
 			libtcod.console_set_default_foreground(con, CONSOLE_COL_2)
 			libtcod.console_print_ex(con, WINDOW_XM, 6, libtcod.BKGND_NONE, libtcod.CENTER,
@@ -478,16 +486,20 @@ class Game:
 					# outdoor area
 					if self.block_map[(x,y)].outdoor:
 						libtcod.console_set_default_foreground(con, CONSOLE_COL_7)
-						DrawRect(con, 16+(x*10), 11+(y*7), 7, 4, 176)
+						DrawRect(con, 14+(x*11), 11+(y*7), 8, 4, 176)
 					
 					# regular building
 					else:
 						libtcod.console_set_default_foreground(con, CONSOLE_COL_3)
-						DrawBox(con, 16+(x*10), 11+(y*7), 8, 5)
-						libtcod.console_print(con, 19+(x*10), 12+(y*7),
+						DrawBox(con, 14+(x*11), 11+(y*7), 8, 4)
+						# display block letter
+						libtcod.console_print(con, 18+(x*11), 12+(y*7),
 							self.block_map[(x,y)].letter)
 					
-					# future: indicate if player in currently in this block
+					# indicate if player in currently in this block
+					if self.player.block == self.block_map[(x,y)]:
+						libtcod.console_put_char(con, 18+(x*11),
+							13+(y*7), 64)
 					
 					# display links to adjacent blocks
 					libtcod.console_set_default_foreground(con, CONSOLE_COL_3)
@@ -497,7 +509,7 @@ class Game:
 							# vertical link
 							if xm == 0:
 								char = 186
-								x1 = 19+(x*10)
+								x1 = 18+(x*11)
 								if ym == -1:
 									y1 = 10+(y*7)
 								else:
@@ -508,9 +520,9 @@ class Game:
 								char = 205
 								y1 = 13+(y*7)
 								if xm == -1:
-									x1 = 15+(x*10)
+									x1 = 13+(x*11)
 								else:
-									x1 = 24+(x*10)
+									x1 = 23+(x*11)
 							
 							libtcod.console_put_char(con, x1, y1, char)
 			
@@ -541,7 +553,13 @@ class Game:
 			# DEBUG - regenerate block map
 			if key_char == 'g':
 				self.GenerateBlocks()
+				self.MovePlayerToBlock('A')
+				self.active_block = self.player.block
+				self.active_block.GenerateLightMap()
+				self.UpdateMapCon()
+				self.UpdateEntityCon()
 				UpdateMap()
+				SaveGame()
 				continue
 		
 		pass
@@ -562,7 +580,7 @@ class Game:
 		text = str(self.hour).zfill(2) + ':' + str(self.minute).zfill(2)
 		libtcod.console_print(info_con, 2, 2, text)
 		
-		libtcod.console_print(info_con, 2, 5, 'Block A')
+		libtcod.console_print(info_con, 2, 5, 'Block ' + self.active_block.letter)
 		libtcod.console_print(info_con, 2, 6, 'Ground Floor')
 		
 		# security status
@@ -585,7 +603,7 @@ class Game:
 		# draw each map cell to the console
 		for x in range(61):
 			for y in range(40):
-				cell = self.block_floor.char_map[(x,y)]
+				cell = self.active_block.char_map[(x,y)]
 				if cell == CELL_NULL:
 					continue
 				elif cell == CELL_TILE:
@@ -602,7 +620,7 @@ class Game:
 					col = CONSOLE_COL_1
 				
 				# change display colour depending on light level of this cell
-				l = self.block_floor.light_map[(x,y)]
+				l = self.active_block.light_map[(x,y)]
 				col = col * libtcod.Color(l, l, l)
 				
 				# draw the display character for this cell
@@ -614,7 +632,7 @@ class Game:
 		libtcod.console_clear(entity_con)
 		
 		# draw light entitites first
-		for entity in self.block_floor.light_entities:
+		for entity in self.active_block.light_entities:
 			entity.DrawMe()
 		
 		for entity in self.entities:
@@ -680,11 +698,9 @@ class Game:
 					y_dist = 1
 				
 				if self.MovePlayer(x_dist, y_dist):
-					
-					self.block_floor.GenerateLightMap()
+					self.active_block.GenerateLightMap()
 					self.UpdateMapCon()
 					self.UpdateEntityCon()
-					
 					self.UpdateScreen()
 					SaveGame()
 				
@@ -698,9 +714,9 @@ class Game:
 			
 			# DEBUG - regenerate the block-floor map
 			elif key_char == 'g':
-				self.block_floor.GenerateMap()
-				self.player.location = self.block_floor.center_point	# move the player too
-				self.block_floor.GenerateLightMap()
+				self.active_block.GenerateMap()
+				self.player.location = self.active_block.center_point	# move the player too
+				self.active_block.GenerateLightMap()
 				self.UpdateMapCon()
 				self.UpdateEntityCon()
 				self.UpdateScreen()
@@ -756,16 +772,16 @@ def DrawRect(console, x, y, w, h, char):
 
 # draw a box of single lines with corners
 def DrawBox(console, x, y, w, h):
-	for x1 in range(x+1, x+w-1):
+	for x1 in range(x+1, x+w):
 		libtcod.console_put_char(console, x1, y, 196)
-		libtcod.console_put_char(console, x1, y+h-1, 196)
-	for y1 in range(y+1, y+h-1):
+		libtcod.console_put_char(console, x1, y+h, 196)
+	for y1 in range(y+1, y+h):
 		libtcod.console_put_char(console, x, y1, 179)
-		libtcod.console_put_char(console, x+w-1, y1, 179)
+		libtcod.console_put_char(console, x+w, y1, 179)
 	libtcod.console_put_char(con, x, y, 218)
-	libtcod.console_put_char(con, x+w-1, y, 191)
-	libtcod.console_put_char(con, x, y+h-1, 192)
-	libtcod.console_put_char(con, x+w-1, y+h-1, 217)
+	libtcod.console_put_char(con, x+w, y, 191)
+	libtcod.console_put_char(con, x, y+h, 192)
+	libtcod.console_put_char(con, x+w, y+h, 217)
 
 
 # draw a vertical line of the given character
@@ -900,7 +916,7 @@ while not exit_game:
 		game = Game()
 		
 		# generate the light map for the block-floor
-		game.block_floor.GenerateLightMap()
+		game.active_block.GenerateLightMap()
 		
 		# start the input loop
 		game.DoInputLoop()

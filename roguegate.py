@@ -497,6 +497,9 @@ class Game:
 		# check for wall blocking
 		if self.active_block.char_map[(x+x_dist,y+y_dist)] == CELL_WALL: return False
 		
+		# check for leaving the play area
+		if self.active_block.char_map[(x+x_dist,y+y_dist)] == CELL_NULL: return False
+		
 		x = x+x_dist
 		y = y+y_dist
 		
@@ -576,7 +579,7 @@ class Game:
 					# display links to adjacent blocks
 					libtcod.console_set_default_foreground(con, CONSOLE_COL_3)
 					for (xm, ym) in BLOCK_LINKS:
-						if self.block_map[(x,y)].links[(xm, ym)] is not False:
+						if self.block_map[(x,y)].links[(xm, ym)] is not None:
 							
 							# vertical link
 							if xm == 0:
@@ -599,7 +602,7 @@ class Game:
 							libtcod.console_put_char(con, x1, y1, char)
 			
 			libtcod.console_set_default_foreground(con, CONSOLE_COL_1)
-			libtcod.console_print(con, 32, 33, 'Esc')
+			libtcod.console_print(con, 34, 33, 'M')
 			libtcod.console_set_default_foreground(con, CONSOLE_COL_3)
 			libtcod.console_print(con, 37, 33, 'Close Map')
 			
@@ -616,14 +619,15 @@ class Game:
 			libtcod.console_flush()
 			if not GetInputEvent(): continue
 			
-			if key.vk == libtcod.KEY_ESCAPE:
+			key_char = chr(key.c).lower()
+			
+			# exit map view
+			if key_char == 'm':
 				exit_loop = True
 				continue
 			
-			key_char = chr(key.c).lower()
-			
 			# DEBUG - regenerate block map
-			if key_char == 'g':
+			elif key_char == 'g':
 				self.GenerateBlocks()
 				self.MovePlayerToBlock('A')
 				self.active_block = self.player.block
@@ -661,9 +665,11 @@ class Game:
 		
 		# action key commands
 		libtcod.console_set_default_foreground(info_con, CONSOLE_COL_1)
+		libtcod.console_print(info_con, 2, 37, 'F')
 		libtcod.console_print(info_con, 2, 38, 'M')
 		
 		libtcod.console_set_default_foreground(info_con, CONSOLE_COL_3)
+		libtcod.console_print(info_con, 5, 37, 'Enter Door')
 		libtcod.console_print(info_con, 5, 38, 'View Map')
 		
 	

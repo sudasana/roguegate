@@ -26,7 +26,7 @@
 import os, sys						# OS-related stuff
 import libtcodpy as libtcod
 import shelve						# saving and loading games
-from random import choice
+from random import choice, shuffle
 from math import sqrt
 
 
@@ -334,9 +334,7 @@ class Game:
 		
 		# building blocks within the complex, 5x3 possible locations
 		self.block_map = {}
-		for x in range(5):
-			for y in range(3):
-				self.block_map[(x,y)] = None
+		self.GenerateBlocks()
 		
 		# TEMP - only one block-floor to start
 		self.block_floor = BlockFloor()
@@ -348,6 +346,45 @@ class Game:
 		self.entities.append(new_entity)
 		
 		self.player = new_entity
+	
+	
+	# generate a series of building blocks for the complex
+	def GenerateBlocks(self):
+		
+		for tries in range(300):
+			
+			# clear any existing blocks
+			for x in range(5):
+				for y in range(3):
+					self.block_map[(x,y)] = None
+		
+			# run through block locations and roll for presence of a building block
+			block_list = list(self.block_map.keys())
+			shuffle(block_list)
+			total_blocks = 0
+			
+			for (x,y) in block_list:
+				
+				# blocks in center of complex have less chance of being spawned
+				if y == 1 and 0 < x < 4:
+					chance = 30
+				else:
+					chance = 80
+				
+				# modify by already existing number of blocks
+				chance -= total_blocks * 5
+				
+				if libtcod.random_get_int(0, 1, 100) <= chance:
+					# TEMP
+					self.block_map[(x,y)] = True
+					total_blocks += 1
+			
+			# apply block number restrictions
+			if total_blocks <= 7 or total_blocks >= 11:
+				continue
+			else: 
+				return
+		
 	
 	# try to move the player one cell in the given direction
 	def MovePlayer(self, x_dist, y_dist):
@@ -389,11 +426,13 @@ class Game:
 			libtcod.console_print_ex(con, WINDOW_XM, 8, libtcod.BKGND_NONE, libtcod.CENTER,
 				'Ground Floor')
 			
-			# TEMP - display empty blocks
-			libtcod.console_set_default_foreground(con, CONSOLE_COL_7)
+			# display blocks
+			libtcod.console_set_default_foreground(con, CONSOLE_COL_3)
 			for x in range(5):
 				for y in range(3):
-					DrawRect(con, 16+(x*10), 11+(y*7), 7, 4, 176)
+					
+					if self.block_map[(x,y)] is not None:
+						DrawBox(con, 16+(x*10), 11+(y*7), 8, 5)
 					
 					
 						
@@ -420,6 +459,14 @@ class Game:
 			
 			if key.vk == libtcod.KEY_ESCAPE:
 				exit_loop = True
+				continue
+			
+			key_char = chr(key.c).lower()
+			
+			# DEBUG - regenerate block map
+			if key_char == 'g':
+				self.GenerateBlocks()
+				UpdateMap()
 				continue
 		
 		pass

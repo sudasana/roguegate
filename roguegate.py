@@ -274,6 +274,9 @@ class BlockFloor():
 			
 			(x1, y1) = choice(possible_door_cells)
 			self.SetCell(x1, y1, CELL_DOOR, False, False)
+		
+		# TODO: create links to adjacent block cells
+		
 	
 	
 	# generate or re-generate the light map for all cells in this block-level
@@ -303,7 +306,14 @@ class BlockFloor():
 					# set this cell's light level 
 					if new_level > self.light_map[(x+xm, y+ym)]:
 						self.light_map[(x+xm, y+ym)] = new_level
-			
+		
+		
+		# TEMP - full light
+		for x in range(61):
+			for y in range(40):
+				self.light_map[(x,y)] = 255
+		return
+		
 		
 		# set all initial values to low light
 		for x in range(61):

@@ -60,6 +60,8 @@ CELL_MARKER = 100					# a marker of some kind, used for debugging
 
 BLOCK_LINKS = [(0,-1), (1,0), (0,1), (-1,0)]		# list of directions for links to adjacent blocks
 
+FLOOR_NAMES = ['Ground', 'Second', 'Third', 'Fourth']
+
 SINTABLE = [
 	0.00000, 0.01745, 0.03490, 0.05234, 0.06976, 0.08716, 0.10453,
 	0.12187, 0.13917, 0.15643, 0.17365, 0.19081, 0.20791, 0.22495, 0.24192,
@@ -169,8 +171,9 @@ COSTABLE = [
 
 ##### BlockFloor Object - represents one floor of one block of the entire complex #####
 class BlockFloor():
-	def __init__(self, outdoor=False):
+	def __init__(self, floor, outdoor=False):
 		
+		self.floor = floor
 		self.outdoor=outdoor			# block is only the ground floor of an outdoor area
 		self.letter = ''			# block letter, A-
 		
@@ -616,13 +619,16 @@ class Game:
 		self.entities = []
 		
 		# building blocks within the complex, 5x3 possible locations
+		# dictionary, one list per coordinate
 		self.block_map = {}
 		self.GenerateBlocks()
 		for x in range(5):
 			for y in range(3):
-				self.block_map[(x,y)].GenerateLinks()
+				for block in self.block_map[(x,y)]:
+					block.GenerateLinks()
 		
 		self.active_block = None			# current block in viewport
+		self.active_floor = 0				# current floor in viewport
 		self.vis_map = {}				# visibility for player in current block
 		for x in range(61):
 			for y in range(40):
@@ -639,15 +645,16 @@ class Game:
 		self.active_block = self.player.block
 	
 	
-	# move the player to the center of the given block
+	# warp the player to the center of the given block
 	def MovePlayerToBlock(self, block_letter):
 		for x in range(5):
 			for y in range(3):
-				if self.block_map[(x,y)].letter == block_letter:
-					self.player.block = self.block_map[(x,y)]
-					self.player.location = self.block_map[(x,y)].center_point
-					self.player.facing = (0,1)
-					return
+				for block in self.block_map[(x,y)]:
+					if block.letter == block_letter:
+						self.player.block = block
+						self.player.location = block.center_point
+						self.player.facing = (0,1)
+						return
 	
 	
 	# generate a series of building blocks for the complex
@@ -658,7 +665,7 @@ class Game:
 			# clear any existing blocks
 			for x in range(5):
 				for y in range(3):
-					self.block_map[(x,y)] = None
+					self.block_map[(x,y)] = []
 		
 			# run through block locations and roll for presence of a building block
 			block_list = list(self.block_map.keys())
@@ -677,10 +684,10 @@ class Game:
 				chance -= total_blocks * 5
 				
 				if libtcod.random_get_int(0, 1, 100) <= chance:
-					self.block_map[(x,y)] = BlockFloor()
+					self.block_map[(x,y)].append(BlockFloor(0))
 					total_blocks += 1
 				else:
-					self.block_map[(x,y)] = BlockFloor(outdoor=True)
+					self.block_map[(x,y)].append(BlockFloor(0, outdoor=True))
 			
 			# apply block number restrictions
 			if total_blocks <= 7 or total_blocks >= 11:
@@ -688,18 +695,28 @@ class Game:
 			else: 
 				break
 		
+		
+		
+		
 		# apply letters to blocks and link blocks to adjacent ones
 		i = 0
 		for y in range(3):
 			for x in range(5):
-				if not self.block_map[(x,y)].outdoor:
-					self.block_map[(x,y)].letter = chr(i+65)
-					i += 1
 				
-				# check for links to be made
-				for (xm, ym) in BLOCK_LINKS:
-					if (x+xm, y+ym) in self.block_map:
-						self.block_map[(x,y)].links[(xm,ym)] = self.block_map[(x+xm,y+ym)]
+				for block in self.block_map[(x,y)]:
+					
+					if not block.outdoor:
+						block.letter = chr(i+65)
+						i += 1
+			
+					# check for links to be made
+					for (xm, ym) in BLOCK_LINKS:
+						if (x+xm, y+ym) in self.block_map:
+							block_list = self.block_map[(x+xm,y+ym)]
+							
+							# adjacent floor exists, link to it
+							if len(block_list) > block.floor:
+								block.links[(xm,ym)] = block_list[block.floor]
 		
 		
 	# try to move the player one cell in the given direction
@@ -768,7 +785,7 @@ class Game:
 	def ViewMap(self):
 		
 		# update the map display
-		def UpdateMap():
+		def UpdateMap(floor):
 			libtcod.console_set_default_background(con, CONSOLE_COL_8)
 			libtcod.console_rect(con, 8, 4, 64, 32, True, libtcod.BKGND_SET)
 			libtcod.console_set_default_background(con, libtcod.black)
@@ -779,16 +796,25 @@ class Game:
 			libtcod.console_print_ex(con, WINDOW_XM, 6, libtcod.BKGND_NONE, libtcod.CENTER,
 				'RogueGate Building Map')
 			libtcod.console_set_default_foreground(con, CONSOLE_COL_3)
-			# TEMP - static
-			libtcod.console_print_ex(con, WINDOW_XM, 8, libtcod.BKGND_NONE, libtcod.CENTER,
-				'Ground Floor')
 			
-			# display blocks
+			text = FLOOR_NAMES[floor] + ' Floor'
+			libtcod.console_print_ex(con, WINDOW_XM, 8, libtcod.BKGND_NONE, libtcod.CENTER,
+				text)
+			
+			# display blocks on this floor
 			for x in range(5):
 				for y in range(3):
 					
+					# floor does not exist in this block
+					if len(self.block_map[(x,y)]) <= floor:
+						libtcod.console_set_default_foreground(con, libtcod.black)
+						DrawRect(con, 14+(x*11), 11+(y*7), 8, 4, 176)
+						continue
+					
+					block = self.block_map[(x,y)][floor]
+					
 					# outdoor area
-					if self.block_map[(x,y)].outdoor:
+					if block.outdoor:
 						libtcod.console_set_default_foreground(con, CONSOLE_COL_7)
 						DrawRect(con, 14+(x*11), 11+(y*7), 8, 4, 176)
 					
@@ -798,10 +824,10 @@ class Game:
 						DrawBox(con, 14+(x*11), 11+(y*7), 8, 4)
 						# display block letter
 						libtcod.console_print(con, 18+(x*11), 12+(y*7),
-							self.block_map[(x,y)].letter)
+							block.letter)
 					
 					# indicate if player in currently in this block
-					if self.player.block == self.block_map[(x,y)]:
+					if self.player.block == block:
 						libtcod.console_set_default_foreground(con, CONSOLE_COL_1)
 						libtcod.console_put_char(con, 18+(x*11),
 							13+(y*7), 64)
@@ -809,7 +835,7 @@ class Game:
 					# display links to adjacent blocks
 					libtcod.console_set_default_foreground(con, CONSOLE_COL_3)
 					for (xm, ym) in BLOCK_LINKS:
-						if self.block_map[(x,y)].links[(xm, ym)] is not None:
+						if block.links[(xm, ym)] is not None:
 							
 							# vertical link
 							if xm == 0:
@@ -838,9 +864,11 @@ class Game:
 			
 			libtcod.console_blit(con, 0, 0, 0, 0, 0, 0, 0)
 		
+		# set the currently displayed floor
+		display_floor = self.player.block.floor
 		
 		# display the map for the first time
-		UpdateMap()
+		UpdateMap(display_floor)
 		
 		# wait for player input
 		exit_loop = False
@@ -856,6 +884,17 @@ class Game:
 				exit_loop = True
 				continue
 			
+			# change displayed floor
+			elif key_char in ['w', 's']:
+				if key_char == 'w' and display_floor < 3:
+					display_floor += 1
+				elif key_char == 's' and display_floor > 0:
+					display_floor -= 1
+				else:
+					continue
+				UpdateMap(display_floor)
+				continue
+			
 			# DEBUG - regenerate block map
 			elif key_char == 'g':
 				self.GenerateBlocks()
@@ -865,7 +904,7 @@ class Game:
 				self.active_block.GenerateLightMap()
 				self.UpdateMapCon()
 				self.UpdateEntityCon()
-				UpdateMap()
+				UpdateMap(display_floor)
 				SaveGame()
 				continue
 		

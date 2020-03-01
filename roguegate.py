@@ -949,8 +949,10 @@ class Game:
 		text = str(self.hour).zfill(2) + ':' + str(self.minute).zfill(2)
 		libtcod.console_print(info_con, 2, 2, text)
 		
-		libtcod.console_print(info_con, 2, 5, 'Block ' + self.active_block.letter)
-		libtcod.console_print(info_con, 2, 6, 'Ground Floor')
+		if not self.active_block.outdoor:
+			libtcod.console_print(info_con, 2, 5, 'Block ' + self.active_block.letter)
+			text = FLOOR_NAMES[self.active_block.floor] + ' Floor'
+			libtcod.console_print(info_con, 2, 6, text)
 		
 		# security status
 		libtcod.console_print(info_con, 2, 9, 'Status: CLEAR')
@@ -1096,6 +1098,7 @@ class Game:
 				if self.LinkPlayer():
 					self.active_block.GenerateVisMap()
 					self.active_block.GenerateLightMap()
+					self.UpdateInfoCon()
 					self.UpdateMapCon()
 					self.UpdateEntityCon()
 					self.UpdateScreen()

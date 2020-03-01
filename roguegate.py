@@ -262,9 +262,9 @@ class BlockFloor():
 			return
 		
 		# set a main horizontal hallway to start
-		hx1 = libtcod.random_get_int(0, 2, 6)
+		hx1 = libtcod.random_get_int(0, 8, 10)
 		hy1 = libtcod.random_get_int(0, 8, 30)
-		hw = libtcod.random_get_int(0, 53, 59) - hx1
+		hw = libtcod.random_get_int(0, 43, 49) - hx1
 		AddRoom(hx1, hy1, hw, 3)
 		
 		# set up a vertical hallway
@@ -428,7 +428,6 @@ class BlockFloor():
 				cast_end = 361
 			else:
 				
-				# facings are rotated 180 degrees from what I expected
 				if facing == (0,-1):
 					cast_start = 135
 					cast_end = 225
@@ -633,31 +632,37 @@ class Game:
 	# try to move the player one cell in the given direction
 	def MovePlayer(self, x_dist, y_dist):
 		
-		(x,y) = self.player.location
+		# check for shift modifier
+		max_moves = 1
 		
-		# make sure new location would still be on map
-		if x+x_dist < 0 or x+x_dist >= 61:
-			return False
-		if y+y_dist < 0 or y+y_dist >= 40:
-			return False
+		if key.shift:
+			max_moves = 3
 		
-		# FUTURE: check for door blocking
+		for i in range(max_moves):
 		
-		# check for wall blocking
-		if self.active_block.char_map[(x+x_dist,y+y_dist)] == CELL_WALL: return False
-		
-		# check for leaving the play area
-		if self.active_block.char_map[(x+x_dist,y+y_dist)] == CELL_NULL: return False
-		
-		# if play is not yet facing this rdirection, rotate them but don't move them
-		if self.player.facing != (x_dist, y_dist):
-			self.player.facing = (x_dist, y_dist)
-			return True
-		
-		# move the player
-		self.player.location = (x+x_dist, y+y_dist)
-		
-		return True
+			(x,y) = self.player.location
+			
+			# make sure new location would still be on map
+			if x+x_dist < 0 or x+x_dist >= 61:
+				return
+			if y+y_dist < 0 or y+y_dist >= 40:
+				return
+			
+			# FUTURE: check for door blocking
+			
+			# check for wall blocking
+			if self.active_block.char_map[(x+x_dist,y+y_dist)] == CELL_WALL: return
+			
+			# check for leaving the play area
+			if self.active_block.char_map[(x+x_dist,y+y_dist)] == CELL_NULL: return
+			
+			# if play is not yet facing this rdirection, rotate them but don't move them
+			if self.player.facing != (x_dist, y_dist):
+				self.player.facing = (x_dist, y_dist)
+				return
+			
+			# move the player
+			self.player.location = (x+x_dist, y+y_dist)
 	
 	
 	# try to warp the player to an adjacent block
@@ -818,12 +823,16 @@ class Game:
 		
 		# action key commands
 		libtcod.console_set_default_foreground(info_con, CONSOLE_COL_1)
-		libtcod.console_print(info_con, 2, 37, 'F')
-		libtcod.console_print(info_con, 2, 38, 'M')
+		libtcod.console_print(info_con, 2, 32, 'WASD')
+		libtcod.console_print(info_con, 1, 33, '+Shft')
+		libtcod.console_print(info_con, 4, 34, 'E')
+		libtcod.console_print(info_con, 4, 35, 'M')
 		
 		libtcod.console_set_default_foreground(info_con, CONSOLE_COL_3)
-		libtcod.console_print(info_con, 5, 37, 'Enter Door')
-		libtcod.console_print(info_con, 5, 38, 'View Map')
+		libtcod.console_print(info_con, 8, 32, 'Move')
+		libtcod.console_print(info_con, 8, 33, 'Run')
+		libtcod.console_print(info_con, 8, 34, 'Enter')
+		libtcod.console_print(info_con, 8, 35, 'Map')
 		
 	
 	
@@ -937,18 +946,18 @@ class Game:
 				else:
 					y_dist = 1
 				
-				if self.MovePlayer(x_dist, y_dist):
-					self.active_block.GenerateVisMap()
-					self.active_block.GenerateLightMap()
-					self.UpdateMapCon()
-					self.UpdateEntityCon()
-					self.UpdateScreen()
-					SaveGame()
+				self.MovePlayer(x_dist, y_dist)
+				self.active_block.GenerateVisMap()
+				self.active_block.GenerateLightMap()
+				self.UpdateMapCon()
+				self.UpdateEntityCon()
+				self.UpdateScreen()
+				SaveGame()
 
 				continue
 			
 			# link to new block
-			elif key_char == 'f':
+			elif key_char == 'e':
 				if self.LinkPlayer():
 					self.active_block.GenerateVisMap()
 					self.active_block.GenerateLightMap()
@@ -975,7 +984,9 @@ class Game:
 				self.UpdateScreen()
 				SaveGame()
 				continue
-		
+			
+			# unrecognized command, flush it
+			FlushKeyboardEvents()
 
 
 
@@ -1048,6 +1059,7 @@ def GetInputEvent():
 	global key_down
 	event = libtcod.sys_check_for_event(libtcod.EVENT_KEY_RELEASE|libtcod.EVENT_KEY_PRESS|libtcod.EVENT_MOUSE,
 		key, mouse)
+	
 	if key_down:
 		if event != libtcod.EVENT_KEY_RELEASE:
 			return False

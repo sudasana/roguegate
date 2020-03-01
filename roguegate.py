@@ -418,11 +418,42 @@ class BlockFloor():
 	# generate or re-generate the light map for all cells in this block-level
 	def GenerateLightMap(self):
 		
-		def Raycast(x, y, radius):
+		def Raycast(x, y, radius, facing=None):
 			
-			STEP = 4			# how many steps per cycle
+			STEP = 2			# how many steps per cycle
 			
-			for i in range(0, 361, STEP): 
+			# if light has a facing, only cast it for 90 degrees in that direction
+			if facing is None:
+				cast_start = 0
+				cast_end = 361
+			else:
+				
+				# facings are rotated 180 degrees from what I expected
+				if facing == (0,-1):
+					cast_start = 135
+					cast_end = 225
+				elif facing == (-1,0):
+					cast_start = 225
+					cast_end = 315
+				elif facing == (0,1):
+					cast_start = 315
+					cast_end = 45
+				elif facing == (1,0):
+					cast_start = 45
+					cast_end = 135
+				else:
+					print('ERROR: Incorrect facing on entity')
+					return
+			
+			for i in range(0, 361, STEP):
+				
+				if facing is not None:
+					if facing == (0,1):
+						if i < cast_start and i > cast_end: continue
+					else:
+						if i < cast_start and i < cast_end: continue
+						if i > cast_start and i > cast_end: continue
+				
 				ax = SINTABLE[i]	# Get precalculated value sin(x / (180 / pi))
 				ay = COSTABLE[i]	# cos(x / (180 / pi))
 				
@@ -446,8 +477,8 @@ class BlockFloor():
 					if new_level > self.light_map[(cx, cy)]:
 						self.light_map[(cx, cy)] = new_level
 					
-					# ray hit a wall
-					if self.GetCell(cx, cy) == CELL_WALL:
+					# ray hit a wall or door
+					if self.GetCell(cx, cy) in [CELL_WALL, CELL_DOOR]:
 						break
 
 		# reset light levels
@@ -459,10 +490,21 @@ class BlockFloor():
 			(x, y) = entity.location
 			Raycast(x, y, entity.light_radius)
 				
-		# TEMP - cast light around the player
+		# cast light from player flashlight
 		(x, y) = game.player.location
-		Raycast(x, y, 8)
+		Raycast(x, y, 12, facing=game.player.facing)
 
+
+	# generate the player visibility map for this block, store info in game object
+	def GenerateVisMap(self):
+		
+		# TEMP
+		# clear current vis map
+		for x in range(61):
+			for y in range(40):
+				game.vis_map[(x,y)] = True
+		
+	
 
 
 ##### Entity Object - represents the player, one of the burglars, etc.
@@ -471,7 +513,8 @@ class Entity:
 		self.is_player = False
 		self.block = None		# pointer to block location
 		self.location = (0,0)		# current location in the world
-		self.light_radius = 0		# entity emits light ot his radius
+		self.facing = None		# direction facing
+		self.light_radius = 0		# entity emits light to this radius
 	
 	# draw entity onto the entity console
 	def DrawMe(self):
@@ -508,6 +551,10 @@ class Game:
 				self.block_map[(x,y)].GenerateLinks()
 		
 		self.active_block = None			# current block in viewport
+		self.vis_map = {}				# visibility for player in current block
+		for x in range(61):
+			for y in range(40):
+				self.vis_map[(x,y)] = False
 		
 		# create player object
 		new_entity = Entity()
@@ -527,6 +574,7 @@ class Game:
 				if self.block_map[(x,y)].letter == block_letter:
 					self.player.block = self.block_map[(x,y)]
 					self.player.location = self.block_map[(x,y)].center_point
+					self.player.facing = (0,1)
 					return
 	
 	
@@ -593,16 +641,21 @@ class Game:
 		if y+y_dist < 0 or y+y_dist >= 40:
 			return False
 		
+		# FUTURE: check for door blocking
+		
 		# check for wall blocking
 		if self.active_block.char_map[(x+x_dist,y+y_dist)] == CELL_WALL: return False
 		
 		# check for leaving the play area
 		if self.active_block.char_map[(x+x_dist,y+y_dist)] == CELL_NULL: return False
 		
-		x = x+x_dist
-		y = y+y_dist
+		# if play is not yet facing this rdirection, rotate them but don't move them
+		if self.player.facing != (x_dist, y_dist):
+			self.player.facing = (x_dist, y_dist)
+			return True
 		
-		self.player.location = (x,y)
+		# move the player
+		self.player.location = (x+x_dist, y+y_dist)
 		
 		return True
 	
@@ -730,6 +783,7 @@ class Game:
 				self.GenerateBlocks()
 				self.MovePlayerToBlock('A')
 				self.active_block = self.player.block
+				self.active_block.GenerateVisMap()
 				self.active_block.GenerateLightMap()
 				self.UpdateMapCon()
 				self.UpdateEntityCon()
@@ -780,6 +834,7 @@ class Game:
 		# draw each map cell to the console
 		for x in range(61):
 			for y in range(40):
+				
 				cell = self.active_block.char_map[(x,y)]
 				if cell == CELL_NULL:
 					continue
@@ -799,9 +854,14 @@ class Game:
 					char = 254
 					col = CONSOLE_COL_1
 				
-				# change display colour depending on light level of this cell
-				l = self.active_block.light_map[(x,y)]
-				col = col * libtcod.Color(l, l, l)
+				# if not visible to player, display as dark as possible
+				if not self.vis_map[(x,y)]:
+					col = CONSOLE_COL_8
+				else:
+				
+					# change display colour depending on light level of this cell
+					l = self.active_block.light_map[(x,y)]
+					col = col * libtcod.Color(l, l, l)
 				
 				# draw the display character for this cell
 				libtcod.console_put_char_ex(map_con, x, y, char, col, libtcod.black)
@@ -878,6 +938,7 @@ class Game:
 					y_dist = 1
 				
 				if self.MovePlayer(x_dist, y_dist):
+					self.active_block.GenerateVisMap()
 					self.active_block.GenerateLightMap()
 					self.UpdateMapCon()
 					self.UpdateEntityCon()
@@ -889,6 +950,7 @@ class Game:
 			# link to new block
 			elif key_char == 'f':
 				if self.LinkPlayer():
+					self.active_block.GenerateVisMap()
 					self.active_block.GenerateLightMap()
 					self.UpdateMapCon()
 					self.UpdateEntityCon()
@@ -1106,7 +1168,8 @@ while not exit_game:
 		# create a new game object
 		game = Game()
 		
-		# generate the light map for the block-floor
+		# generate the visibility and light maps for the block-floor
+		game.active_block.GenerateVisMap()
 		game.active_block.GenerateLightMap()
 		
 		# start the input loop

@@ -61,6 +61,7 @@ CELL_MARKER = 100					# a marker of some kind, used for debugging
 class BlockFloor():
 	def __init__(self):
 		
+		self.letter = ''			# block letter, A-
 		self.char_map = {}			# map of cells
 		self.center_point = (0,0)
 		self.rooms = []				# list of rooms in (x,y,w,h) format
@@ -375,15 +376,23 @@ class Game:
 				chance -= total_blocks * 5
 				
 				if libtcod.random_get_int(0, 1, 100) <= chance:
-					# TEMP
-					self.block_map[(x,y)] = True
+					self.block_map[(x,y)] = BlockFloor()
 					total_blocks += 1
 			
 			# apply block number restrictions
 			if total_blocks <= 7 or total_blocks >= 11:
 				continue
 			else: 
-				return
+				break
+		
+		# apply letters to blocks
+		i = 0
+		for y in range(3):
+			for x in range(5):
+				if self.block_map[(x,y)] is not None:
+					self.block_map[(x,y)].letter = chr(i+65)
+					i += 1
+					
 		
 	
 	# try to move the player one cell in the given direction
@@ -433,11 +442,8 @@ class Game:
 					
 					if self.block_map[(x,y)] is not None:
 						DrawBox(con, 16+(x*10), 11+(y*7), 8, 5)
-					
-					
-						
-						
-			
+						libtcod.console_print(con, 19+(x*10), 13+(y*7),
+							self.block_map[(x,y)].letter)
 			
 			libtcod.console_set_default_foreground(con, CONSOLE_COL_1)
 			libtcod.console_print(con, 32, 33, 'Esc')

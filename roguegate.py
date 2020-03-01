@@ -54,6 +54,7 @@ CELL_NULL = 0						# not active, no interactions possible
 CELL_TILE = 1						# generic linoleum tile flooring
 CELL_WALL = 2						# solid concrete wall
 CELL_DOOR = 3						# door, further info stored in the doors list
+CELL_LINK = 4						# represents a link to another block
 
 CELL_MARKER = 100					# a marker of some kind, used for debugging
 
@@ -69,10 +70,17 @@ class BlockFloor():
 		self.letter = ''			# block letter, A-
 		
 		self.links = {				# links to adjacent blocks
-			(0,-1): False,
-			(1,0): False,
-			(0,1): False,
-			(-1,0): False
+			(0,-1): None,
+			(1,0): None,
+			(0,1): None,
+			(-1,0): None
+		}
+		
+		self.link_locations = {			# cell locations of links to other blocks
+			(0,-1): None,
+			(1,0): None,
+			(0,1): None,
+			(-1,0): None
 		}
 		
 		self.char_map = {}			# map of cells
@@ -275,8 +283,31 @@ class BlockFloor():
 			(x1, y1) = choice(possible_door_cells)
 			self.SetCell(x1, y1, CELL_DOOR, False, False)
 		
-		# TODO: create links to adjacent block cells
-		
+	# generate links cells for this block to adjacent ones
+	def GenerateLinks(self):
+		for (xm, ym) in BLOCK_LINKS:
+			
+			# link in this direction
+			if self.links[(xm, ym)]:
+				
+				(x, y) = self.center_point
+				
+				link_set = False
+				while not link_set:
+					
+					# edge of map
+					if self.GetCell(x+xm, y+ym) == CELL_NULL:
+						pass
+					
+					elif self.GetCell(x, y) != CELL_WALL:
+						x += xm
+						y += ym
+						continue
+					
+					self.SetCell(x, y, CELL_LINK, False, False)
+					self.link_locations[(xm, ym)] = (x,y)
+					link_set = True
+					continue
 	
 	
 	# generate or re-generate the light map for all cells in this block-level
@@ -373,6 +404,9 @@ class Game:
 		# building blocks within the complex, 5x3 possible locations
 		self.block_map = {}
 		self.GenerateBlocks()
+		for x in range(5):
+			for y in range(3):
+				self.block_map[(x,y)].GenerateLinks()
 		
 		self.active_block = None			# current block in viewport
 		
@@ -443,10 +477,10 @@ class Game:
 					self.block_map[(x,y)].letter = chr(i+65)
 					i += 1
 				
-				# check for links
+				# check for links to be made
 				for (xm, ym) in BLOCK_LINKS:
 					if (x+xm, y+ym) in self.block_map:
-						self.block_map[(x,y)].links[(xm,ym)] = True
+						self.block_map[(x,y)].links[(xm,ym)] = self.block_map[(x+xm,y+ym)]
 		
 		
 	# try to move the player one cell in the given direction
@@ -467,7 +501,34 @@ class Game:
 		y = y+y_dist
 		
 		self.player.location = (x,y)
+		
 		return True
+	
+	
+	# try to warp the player to an adjacent block
+	def LinkPlayer(self):
+		
+		for (xm, ym) in BLOCK_LINKS:
+			if self.active_block.link_locations[(xm, ym)] is not None:
+				(x, y) = self.active_block.link_locations[(xm, ym)]
+				
+				# player is on a link location
+				if self.player.location == (x, y):
+					
+					# move them to the adjacent block and move view
+					self.player.block = self.active_block.links[(xm, ym)]
+					self.active_block = self.player.block
+					
+					# place them at the corresponding link location in the new block
+					xm = 0 - xm
+					ym = 0 - ym
+					
+					self.player.location = self.active_block.link_locations[(xm, ym)]
+					
+					return True
+		
+		
+		return False
 	
 	
 	# display the building block map
@@ -508,13 +569,14 @@ class Game:
 					
 					# indicate if player in currently in this block
 					if self.player.block == self.block_map[(x,y)]:
+						libtcod.console_set_default_foreground(con, CONSOLE_COL_1)
 						libtcod.console_put_char(con, 18+(x*11),
 							13+(y*7), 64)
 					
 					# display links to adjacent blocks
 					libtcod.console_set_default_foreground(con, CONSOLE_COL_3)
 					for (xm, ym) in BLOCK_LINKS:
-						if self.block_map[(x,y)].links[(xm, ym)] is True:
+						if self.block_map[(x,y)].links[(xm, ym)] is not False:
 							
 							# vertical link
 							if xm == 0:
@@ -625,6 +687,9 @@ class Game:
 				elif cell == CELL_DOOR:
 					char = 196
 					col = CONSOLE_COL_3
+				elif cell == CELL_LINK:
+					char = 240
+					col = CONSOLE_COL_1
 				elif floor_cell == CELL_MARKER:
 					char = 254
 					col = CONSOLE_COL_1
@@ -713,7 +778,17 @@ class Game:
 					self.UpdateEntityCon()
 					self.UpdateScreen()
 					SaveGame()
-				
+
+				continue
+			
+			# link to new block
+			elif key_char == 'f':
+				if self.LinkPlayer():
+					self.active_block.GenerateLightMap()
+					self.UpdateMapCon()
+					self.UpdateEntityCon()
+					self.UpdateScreen()
+					SaveGame()
 				continue
 			
 			# view building block map
@@ -725,6 +800,7 @@ class Game:
 			# DEBUG - regenerate the block-floor map
 			elif key_char == 'g':
 				self.active_block.GenerateMap()
+				self.active_block.GenerateLinks()
 				self.player.location = self.active_block.center_point	# move the player too
 				self.active_block.GenerateLightMap()
 				self.UpdateMapCon()

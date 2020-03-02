@@ -29,9 +29,15 @@ import shelve						# saving and loading games
 from random import choice, shuffle
 from math import sqrt
 from copy import deepcopy
+from textwrap import wrap				# breaking up strings
 
 
 ##### Constants #####
+
+# debug flags
+FULL_LIGHT = False
+FULL_VIS = False
+
 NAME = 'RogueGate'					# game name
 VERSION = '0.1'						# game version
 RENDERER = libtcod.RENDERER_OPENGL2
@@ -168,6 +174,16 @@ COSTABLE = [
 ]
 
 
+##### Room Object - represents one room within a blockfloor
+class Room():
+	def __init__(self, blockfloor, x, y, w, h):
+		self.blockfloor = blockfloor
+		self.x = x
+		self.y = y
+		self.w = w
+		self.h = h
+		self.number = 0
+
 
 
 ##### BlockFloor Object - represents one floor of one block of the entire complex #####
@@ -230,11 +246,11 @@ class BlockFloor():
 		return self.char_map[(x,y)]
 	
 	
-	# generate or re-generate the map, 61x40
+	# generate or re-generate the map for this blockfloor, 61x40
 	def GenerateMap(self):
 		
 		# create a room: h, w is the floor space, with one extra layer of walls
-		def AddRoom(x1, y1, w, h, skip_replace=False, skip_floors=False):
+		def AddRoom(x1, y1, w, h, skip_replace=False, skip_floors=False, numbered=False):
 			for x in range(x1, x1+w):
 				for y in range(y1, y1+h):
 					self.SetCell(x, y, CELL_TILE, skip_replace, skip_floors)
@@ -246,6 +262,11 @@ class BlockFloor():
 			for y in range(y1-1, y1+h+1):
 				self.SetCell(x1-1, y, CELL_WALL, skip_replace, skip_floors)
 				self.SetCell(x1+w, y, CELL_WALL, skip_replace, skip_floors)
+			
+			# record the room if it's numbered
+			if not numbered: return
+			self.rooms.append(Room(self, x1, y1, w, h))
+			
 		
 		# character map - one for each possible map cell
 		# set all cells to null to start
@@ -272,14 +293,14 @@ class BlockFloor():
 		
 		# set a main horizontal hallway to start
 		hx1 = libtcod.random_get_int(0, 8, 10)
-		hy1 = libtcod.random_get_int(0, 8, 30)
+		hy1 = libtcod.random_get_int(0, 8, 27)
 		hw = libtcod.random_get_int(0, 43, 49) - hx1
 		AddRoom(hx1, hy1, hw, 3)
 		
 		# set up a vertical hallway
-		vx1 = libtcod.random_get_int(0, 12, 50)
-		vy1 = libtcod.random_get_int(0, 4, 8)
-		vh = libtcod.random_get_int(0, 30, 38) - vy1
+		vx1 = libtcod.random_get_int(0, 22, 40)
+		vy1 = libtcod.random_get_int(0, 4, 6)
+		vh = libtcod.random_get_int(0, 30, 36) - vy1
 		AddRoom(vx1, vy1, 3, vh, skip_floors=True)
 		
 		# record center point and add a light here
@@ -300,8 +321,8 @@ class BlockFloor():
 		# adjust in case they would go off the map
 		if hy1-1-room_height_upper <= 0:
 			room_height_upper = hy1-2
-		if hy1+2+room_height_lower >= 37:
-			room_height_lower = 37-hy1-2
+		if hy1+2+room_height_lower >= 36:
+			room_height_lower = 36-hy1-2
 		
 		# run across the x axis and try to add upper rooms
 		x = hx1
@@ -318,21 +339,17 @@ class BlockFloor():
 					room_clear = False
 				if not room_clear: break
 				for y1 in range(hy1-room_height_upper, hy1-1):
-					if self.char_map[(x1,y1)] == CELL_WALL:
+					if self.char_map[(x1,y1)] != CELL_NULL:
 						room_clear = False
 						break
 			
-			# if not enough space, try to adjust the room width
+			# if not enough space
 			if not room_clear:
-				width = x1-x
-				if width <= 2:
-					x += 2
-					continue
+				x+=1
+				continue
 			
 			# create the room
-			AddRoom(x, hy1-room_height_upper-1, width, room_height_upper, skip_replace=True)
-			# record it
-			self.rooms.append((x, hy1-room_height_upper-1, width, room_height_upper))
+			AddRoom(x, hy1-room_height_upper-1, width, room_height_upper, skip_replace=True, numbered=True)
 			
 			x += width+1
 		
@@ -351,21 +368,17 @@ class BlockFloor():
 					room_clear = False
 				if not room_clear: break
 				for y1 in range(hy1+4, hy1+3+room_height_lower):
-					if self.char_map[(x1,y1)] == CELL_WALL:
+					if self.char_map[(x1,y1)] != CELL_NULL:
 						room_clear = False
 						break
 			
 			# if not enough space, try to adjust the room width
 			if not room_clear:
-				width = x1-x
-				if width <= 2:
-					x += 2
-					continue
+				x+=1
+				continue
 			
 			# create the room
-			AddRoom(x, hy1+4, width, room_height_lower, skip_replace=True)
-			self.rooms.append((x, hy1+4, width, room_height_lower))
-			
+			AddRoom(x, hy1+4, width, room_height_lower, skip_replace=True, numbered=True)
 			x += width+1
 
 		
@@ -373,31 +386,38 @@ class BlockFloor():
 		
 		
 		# create doors to connect rooms to at least one hallway
-		
-		for (x, y, w, h) in self.rooms:
+		for room in self.rooms:
 			possible_door_cells = []
 			
 			# check upper wall
-			for x1 in range(x, x+w):
-				if self.GetCell(x1-1, y-1) != CELL_WALL: continue
-				if self.GetCell(x1+1, y-1) != CELL_WALL: continue
-				if self.GetCell(x1,y-2) == CELL_TILE:
-					possible_door_cells.append((x1, y-1))
+			for x1 in range(room.x, room.x+room.w):
+				if self.GetCell(x1-1, room.y-1) != CELL_WALL: continue
+				if self.GetCell(x1+1, room.y-1) != CELL_WALL: continue
+				if self.GetCell(x1,room.y-2) == CELL_TILE:
+					possible_door_cells.append((x1, room.y-1))
 				
 			# check lower wall
-			for x1 in range(x, x+w):
-				if self.GetCell(x1-1, y+h) != CELL_WALL: continue
-				if self.GetCell(x1+1, y+h) != CELL_WALL: continue
-				if self.GetCell(x1,y+h+1) == CELL_TILE:
-					possible_door_cells.append((x1, y+h))
+			for x1 in range(room.x, room.x+room.w):
+				if self.GetCell(x1-1, room.y+room.h) != CELL_WALL: continue
+				if self.GetCell(x1+1, room.y+room.h) != CELL_WALL: continue
+				if self.GetCell(x1,room.y+room.h+1) == CELL_TILE:
+					possible_door_cells.append((x1, room.y+room.h))
 		
 			if len(possible_door_cells) == 0:
 				continue
 			
 			(x1, y1) = choice(possible_door_cells)
 			self.SetCell(x1, y1, CELL_DOOR, False, False)
+	
+	
+	# set room numbers for thie blockfloor
+	def SetRoomNumbers(self):
+		room_index = 0
+		for room in self.rooms:
+			room.number = (100 * (self.floor + 1)) + room_index
+			room_index += 1
 		
-		
+	
 	# generate link cells for this block to adjacent ones
 	def GenerateLinks(self):
 		for (xm, ym) in BLOCK_LINKS:
@@ -489,6 +509,13 @@ class BlockFloor():
 					# ray hit a wall or door
 					if self.GetCell(cx, cy) in [CELL_WALL, CELL_DOOR]:
 						break
+		
+		# debug
+		if FULL_LIGHT:
+			for x in range(61):
+				for y in range(40):
+					self.light_map[(x,y)] = 255
+			return
 
 		# reset light levels
 		for x in range(61):
@@ -573,7 +600,13 @@ class BlockFloor():
 				if blocked:
 					break
 
-		
+		# debug flag
+		if FULL_VIS:
+			for x in range(61):
+				for y in range(40):
+					game.vis_map[(x,y)] = True
+			return
+
 		# clear current vis map
 		for x in range(61):
 			for y in range(40):
@@ -621,6 +654,7 @@ class Game:
 		self.hour = 19			# current time
 		self.minute = 0	
 		self.next_day = False		# if clock has passed midnight already
+		self.msg_log = []		# list of game messages
 		
 		# list of entities in the world
 		self.entities = []
@@ -632,6 +666,7 @@ class Game:
 		for x in range(5):
 			for y in range(3):
 				for block in self.block_map[(x,y)]:
+					block.SetRoomNumbers()
 					block.GenerateLinks()
 		
 		self.active_block = None			# current block in viewport
@@ -650,6 +685,13 @@ class Game:
 		# put player in block A to start and move viewport to there
 		self.MovePlayerToBlock('A')
 		self.active_block = self.player.block
+	
+	
+	# add a game message
+	def AddMessage(self, text):
+		self.msg_log.append(text)
+		self.UpdateMsgCon()
+		self.UpdateScreen()
 	
 	
 	# warp the player to the ground floor, center of the given block
@@ -711,7 +753,7 @@ class Game:
 				self.block_map[(x,y)][0].letter = chr(i+65)
 				
 				# possible 2nd, 3rd, and 4th floor
-				for f in range(1, 5):
+				for f in range(1, 4):
 					
 					# roll to break here
 					if libtcod.random_get_int(0, 1, 100) <= f*10:
@@ -832,6 +874,48 @@ class Game:
 		
 		return True
 	
+	
+	# display the message log
+	def ViewMessages(self):
+		
+		# update the messages display
+		def UpdateMessageDisplay():
+			libtcod.console_set_default_background(con, CONSOLE_COL_8)
+			libtcod.console_rect(con, 8, 4, 64, 32, True, libtcod.BKGND_SET)
+			libtcod.console_set_default_background(con, libtcod.black)
+			libtcod.console_set_default_foreground(con, CONSOLE_COL_3)
+			DrawBox(con, 8, 4, 63, 31)
+			libtcod.console_set_default_foreground(con, CONSOLE_COL_2)
+			libtcod.console_print_ex(con, WINDOW_XM, 6, libtcod.BKGND_NONE, libtcod.CENTER,
+				'Messages')
+			libtcod.console_set_default_foreground(con, CONSOLE_COL_3)
+			
+			y = 8
+			for text in self.msg_log:
+				libtcod.console_print(con, 9, y, text)
+				y+=1
+			
+			libtcod.console_set_default_foreground(con, CONSOLE_COL_1)
+			libtcod.console_print(con, 34, 33, 'L')
+			libtcod.console_set_default_foreground(con, CONSOLE_COL_3)
+			libtcod.console_print(con, 37, 33, 'Close Log')
+			
+			libtcod.console_blit(con, 0, 0, 0, 0, 0, 0, 0)
+	
+		UpdateMessageDisplay()
+	
+		# wait for player input
+		exit_loop = False
+		while not exit_loop:
+			if libtcod.console_is_window_closed(): sys.exit()
+			libtcod.console_flush()
+			if not GetInputEvent(): continue
+			key_char = chr(key.c).lower()
+			
+			# exit message view
+			if key_char == 'l':
+				exit_loop = True
+			
 	
 	# display the building block map
 	def ViewMap(self):
@@ -978,6 +1062,7 @@ class Game:
 		libtcod.console_print(info_con, 3, 34, '</>')
 		libtcod.console_print(info_con, 4, 35, 'E')
 		libtcod.console_print(info_con, 4, 36, 'M')
+		libtcod.console_print(info_con, 4, 37, 'L')
 		
 		libtcod.console_set_default_foreground(info_con, CONSOLE_COL_3)
 		libtcod.console_print(info_con, 8, 32, 'Move')
@@ -985,8 +1070,8 @@ class Game:
 		libtcod.console_print(info_con, 8, 34, 'Up/Down')
 		libtcod.console_print(info_con, 8, 35, 'Enter')
 		libtcod.console_print(info_con, 8, 36, 'Map')
+		libtcod.console_print(info_con, 8, 37, 'Log')
 		
-	
 	
 	# update the floor map console
 	def UpdateMapCon(self):
@@ -1027,6 +1112,12 @@ class Game:
 				# draw the display character for this cell
 				libtcod.console_put_char_ex(map_con, x, y, char, col, libtcod.black)
 	
+		# display room numbers
+		libtcod.console_set_default_foreground(map_con, CONSOLE_COL_5)
+		for room in self.active_block.rooms:
+			libtcod.console_print(map_con, room.x+1, room.y+1,
+				str(room.number))
+	
 	
 	# draw entities to the entity console
 	def UpdateEntityCon(self):
@@ -1040,11 +1131,24 @@ class Game:
 			entity.DrawMe()
 	
 	
+	# update most recent message console
+	def UpdateMsgCon(self):
+		libtcod.console_clear(msg_con)
+		# none to display
+		if len(self.msg_log) == 0: return
+		lines = wrap(self.msg_log[-1], 40)
+		y = 0
+		for line in lines[:2]:
+			libtcod.console_print(msg_con, 0, y, line)
+			y+=1
+	
+	
 	# update the game screen and blit to the root console
 	def UpdateScreen(self):
 		libtcod.console_clear(con)
 		libtcod.console_blit(info_con, 0, 0, 0, 0, con, 0, 0)
 		libtcod.console_blit(map_con, 0, 0, 0, 0, con, 19, 0)
+		libtcod.console_blit(msg_con, 0, 0, 0, 0, con, 19, 38)
 		libtcod.console_blit(entity_con, 0, 0, 0, 0, con, 19, 0)
 		libtcod.console_set_default_foreground(con, CONSOLE_COL_3)
 		DrawVLine(con, 18, 0, 40, 179)
@@ -1054,18 +1158,22 @@ class Game:
 	# do the input loop for the active game
 	def DoInputLoop(self):
 		
-		global info_con, map_con, entity_con
+		global info_con, map_con, entity_con, msg_con
 		
 		# create the main screen consoles
 		info_con = NewConsole(18, 40, libtcod.black, CONSOLE_COL_2)
-		map_con = NewConsole(61, 40, libtcod.black, CONSOLE_COL_2)
+		map_con = NewConsole(61, 38, libtcod.black, CONSOLE_COL_2)
+		msg_con = NewConsole(61, 2, libtcod.black, CONSOLE_COL_2)
 		entity_con = NewConsole(61, 40, KEY_COLOR, CONSOLE_COL_2, key_colour=True)
 		
 		# draw consoles and game screen for first time
 		self.UpdateInfoCon()
 		self.UpdateMapCon()
+		self.UpdateMsgCon()
 		self.UpdateEntityCon()
 		self.UpdateScreen()
+		
+		self.AddMessage('My shift begins. Just another night.')
 		
 		SaveGame()
 		
@@ -1129,6 +1237,12 @@ class Game:
 					self.UpdateEntityCon()
 					self.UpdateScreen()
 					SaveGame()
+				continue
+			
+			# view message log
+			elif key_char == 'l':
+				self.ViewMessages()
+				self.UpdateScreen()
 				continue
 			
 			# view building block map

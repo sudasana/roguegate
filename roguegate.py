@@ -523,7 +523,7 @@ class BlockFloor():
 					if self.GetCell(cx, cy) == CELL_NULL: break
 					
 					# add light
-					new_level = 255 - int(255 * z * 0.1)
+					new_level = 255 - int(255 * z * 0.07)
 					if new_level <= 0:
 						continue
 					
@@ -559,7 +559,7 @@ class BlockFloor():
 				
 		# cast light from player flashlight
 		(x, y) = game.player.location
-		Raycast(x, y, 12, facing=game.player.facing)
+		Raycast(x, y, 14, facing=game.player.facing)
 
 
 	# generate the player visibility map for this block, store info in game object
@@ -664,6 +664,7 @@ class Entity:
 		
 		self.is_door = False
 		self.open_state = False
+		self.opens_up = True
 	
 	
 	# draw entity onto the entity console
@@ -681,7 +682,11 @@ class Entity:
 			col = CONSOLE_COL_1
 		
 		elif self.is_door:
-			char = 196
+			
+			if self.open_state:
+				char = 0
+			else:
+				char = 196
 			col = CONSOLE_COL_3
 		
 		if self.is_player:
@@ -704,6 +709,7 @@ class Entity:
 class Game:
 	def __init__(self):
 		
+		self.init_finished = False
 		self.hour = 19			# current time
 		self.minute = 0	
 		self.next_day = False		# if clock has passed midnight already
@@ -1241,7 +1247,10 @@ class Game:
 		self.UpdateEntityCon()
 		self.UpdateScreen()
 		
-		self.AddMessage('My shift begins. Just another night.')
+		# do init stuff for a new game
+		if not self.init_finished:
+			self.AddMessage('My shift begins. Just another night.')
+			self.init_finished = True
 		
 		SaveGame()
 		

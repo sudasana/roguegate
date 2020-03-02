@@ -694,7 +694,7 @@ class Entity:
 		
 		# light
 		if self.light_radius > 0:
-			char = 254
+			char = 249
 			col = CONSOLE_COL_1
 
 		elif self.is_player:
@@ -710,14 +710,12 @@ class Entity:
 		
 		# office object
 		elif self.object_name is not None:
-			
 			if self.object_name == 'Wooden Desk':
 				char = 22
 			elif self.object_name == 'Cabinet':
-				char = 237
+				char = 240
 			elif self.object_name == 'Chair':
 				char = 7
-			
 			col = CONSOLE_COL_3
 		
 		# error - unknown entity

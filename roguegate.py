@@ -60,7 +60,7 @@ CONSOLE_COL_8 = libtcod.Color(16,12,0)			# dark background colour
 CELL_NULL = 0						# not active, no interactions possible
 CELL_TILE = 1						# generic linoleum tile flooring
 CELL_WALL = 2						# solid concrete wall
-
+CELL_STAIRS = 3						# stairway
 CELL_LINK = 4						# represents a link to another block
 
 CELL_MARKER = 100					# a marker of some kind, used for debugging
@@ -322,8 +322,8 @@ class BlockFloor():
 		# adjust in case they would go off the map
 		if hy1-1-room_height_upper <= 0:
 			room_height_upper = hy1-2
-		if hy1+2+room_height_lower >= 36:
-			room_height_lower = 36-hy1-2
+		if hy1+2+room_height_lower >= 35:
+			room_height_lower = 35-hy1-2
 		
 		# run across the x axis and try to add upper rooms
 		x = hx1
@@ -442,8 +442,9 @@ class BlockFloor():
 			room_index += 1
 		
 	
-	# generate link cells for this block to adjacent ones
+	# generate link cells for this block to horizontal and vertical adjacent ones
 	def GenerateLinks(self):
+		
 		for (xm, ym) in BLOCK_LINKS:
 			
 			# link in this direction
@@ -469,6 +470,23 @@ class BlockFloor():
 					continue
 	
 	
+	# generate objects for this floor
+	def GenerateObjects(self):
+		
+		OBJECTS = ['Wooden Desk', 'Cabinet', 'Chair']
+		
+		for room in self.rooms:
+			
+			for i in range(libtcod.random_get_int(0, 2, 5)):
+				x = libtcod.random_get_int(0, room.x, room.x+room.w-1)
+				y = libtcod.random_get_int(0, room.y, room.y+room.h-1)
+			
+				new_entity = Entity()
+				new_entity.location = (x, y)
+				new_entity.object_name = choice(OBJECTS)
+				self.entities.append(new_entity)
+
+
 	# generate or re-generate the light map for all cells in this block-level
 	def GenerateLightMap(self):
 		
@@ -665,6 +683,8 @@ class Entity:
 		self.is_door = False
 		self.open_state = False
 		self.opens_up = True
+		
+		self.object_name = None		# entity is an office object of some kind
 	
 	
 	# draw entity onto the entity console
@@ -682,20 +702,36 @@ class Entity:
 			col = CONSOLE_COL_1
 		
 		elif self.is_door:
-			
 			if self.open_state:
 				char = 0
 			else:
 				char = 196
 			col = CONSOLE_COL_3
 		
+		# office object
+		elif self.object_name is not None:
+			
+			if self.object_name == 'Wooden Desk':
+				char = 22
+			elif self.object_name == 'Cabinet':
+				char = 237
+			elif self.object_name == 'Chair':
+				char = 7
+			
+			col = CONSOLE_COL_3
+		
+		# error - unknown entity
+		else:
+			char = 63
+			col = libtcod.light_red
+		
 		if self.is_player:
 			pass
+		
 		# if not visible to player, display as dark as possible
 		elif not game.vis_map[(x,y)]:
 			col = CONSOLE_COL_8
 		else:
-		
 			# change display colour depending on light level of this cell
 			l = game.active_block.light_map[(x,y)]
 			col = col * libtcod.Color(l, l, l)
@@ -727,6 +763,14 @@ class Game:
 				for block in self.block_map[(x,y)]:
 					block.SetRoomNumbers()
 					block.GenerateLinks()
+		# generate stairways per block with 2+ floors
+		self.GenerateStairways()
+		
+		# generate objects for each floor in each block
+		for x in range(5):
+			for y in range(3):
+				for block in self.block_map[(x,y)]:
+					block.GenerateObjects()
 		
 		self.active_block = None			# current block in viewport
 		self.active_floor = 0				# current floor in viewport
@@ -856,6 +900,55 @@ class Game:
 						block.vertical_links[-1] = self.block_map[(x,y)][block.floor-1]
 	
 	
+	# generate stairway connections for all floors in a given block
+	def GenerateStairways(self):
+		
+		def AddWall(x, y, horizontal_shift):
+			
+			if horizontal_shift < 0:
+				x1 = x-1
+			else:
+				x1 = x+1
+			
+			for y1 in range(y-1,y+2):
+				block.SetCell(x1, y1, CELL_WALL, False, False)
+		
+		for x in range(5):
+			for y in range(3):
+				
+				# skip outdoor and single-level blocks
+				if len(self.block_map[(x,y)]) == 1: continue
+				
+				# working with the ground floor, find two suitable locations
+				# for stairways
+				block = self.block_map[(x,y)][0]
+				
+				# start in the vertical hallway and find the upper and lower end
+				(x1, ys) = block.center_point
+				for y1 in range(ys, 0, -1):
+					if block.GetCell(x1, y1) != CELL_TILE:
+						break
+				y1 += 2
+				horizontal_shift1 = choice([-2, 2])
+				x1 += horizontal_shift1
+				
+				(x2, ys) = block.center_point
+				for y2 in range(ys, 40):
+					if block.GetCell(x2, y2) != CELL_TILE:
+						break
+				y2 -= 2
+				horizontal_shift2 = choice([-2, 2])
+				x2 += horizontal_shift2
+				
+				# apply to each floor
+				for block in self.block_map[(x,y)]:
+					block.SetCell(x1, y1, CELL_STAIRS, False, False)
+					AddWall(x1, y1, horizontal_shift1)
+					block.SetCell(x2, y2, CELL_STAIRS, False, False)
+					AddWall(x2, y2, horizontal_shift2)
+				
+
+	
 	# player tries to open a door
 	def OpenDoor(self):
 		
@@ -874,8 +967,7 @@ class Game:
 			# found door, open it
 			entity.open_state = True
 			return True
-		
-		print('No closed door found')
+
 		return False
 		
 		
@@ -939,6 +1031,9 @@ class Game:
 	
 	# player is trying to go up or down stairs
 	def PlayerTakesStairs(self, upward):
+		
+		# make sure player is on a stair tile
+		if self.active_block.char_map[self.player.location] != CELL_STAIRS: return
 		
 		# see if there is a link here
 		if upward:
@@ -1170,6 +1265,9 @@ class Game:
 					col = CONSOLE_COL_7
 				elif cell == CELL_WALL:
 					char = 178
+					col = CONSOLE_COL_4
+				elif cell == CELL_STAIRS:
+					char = 62
 					col = CONSOLE_COL_4
 				elif cell == CELL_LINK:
 					char = 240

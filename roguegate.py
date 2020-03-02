@@ -60,7 +60,7 @@ CONSOLE_COL_8 = libtcod.Color(16,12,0)			# dark background colour
 CELL_NULL = 0						# not active, no interactions possible
 CELL_TILE = 1						# generic linoleum tile flooring
 CELL_WALL = 2						# solid concrete wall
-CELL_DOOR = 3						# door, further info stored in the doors list
+
 CELL_LINK = 4						# represents a link to another block
 
 CELL_MARKER = 100					# a marker of some kind, used for debugging
@@ -216,8 +216,9 @@ class BlockFloor():
 		self.char_map = {}			# map of cells
 		self.center_point = (0,0)
 		self.rooms = []				# list of rooms in (x,y,w,h) format
-		self.light_entities = []		# list of lights in the map
+		self.entities = []			# list of entities in the map
 		
+		self.blocking_entity_map = {}		# map of cells where light/sight blocked by entities
 		self.light_map = {}			# light values for cells
 		
 		# generate the map for this block-floor
@@ -229,7 +230,7 @@ class BlockFloor():
 		new_entity = Entity()
 		new_entity.location = (x, y)
 		new_entity.light_radius = light_radius
-		self.light_entities.append(new_entity)
+		self.entities.append(new_entity)
 	
 	
 	# set a given cell to a cell type, ignores if not on map
@@ -274,9 +275,9 @@ class BlockFloor():
 			for y in range(40):
 				self.char_map[(x,y)] = CELL_NULL
 		
-		# clear list of rooms, light entities
+		# clear list of rooms, entities
 		self.rooms = []
-		self.light_entities = []
+		self.entities = []
 		
 		# outdoor blocks are set up differently
 		if self.outdoor:
@@ -406,11 +407,34 @@ class BlockFloor():
 			if len(possible_door_cells) == 0:
 				continue
 			
-			(x1, y1) = choice(possible_door_cells)
-			self.SetCell(x1, y1, CELL_DOOR, False, False)
+			(x, y) = choice(possible_door_cells)
+			self.SetCell(x, y, CELL_TILE, False, False)
+			
+			# generate a door entity at x, y
+			new_entity = Entity()
+			new_entity.block = self
+			new_entity.location = (x,y)
+			new_entity.is_door = True
+			self.entities.append(new_entity)
+		
+		self.GenerateSightBlockMap()
 	
 	
-	# set room numbers for thie blockfloor
+	# generate map of light/sight blocking entities
+	def GenerateSightBlockMap(self):
+		
+		# clear current map
+		for x in range(61):
+			for y in range(40):
+				self.blocking_entity_map[(x,y)] = False
+		
+		for entity in self.entities:
+			if not entity.is_door: continue
+			if entity.open_state: continue
+			self.blocking_entity_map[entity.location] = True
+	
+	
+	# set room numbers for this blockfloor
 	def SetRoomNumbers(self):
 		room_index = 0
 		for room in self.rooms:
@@ -506,9 +530,14 @@ class BlockFloor():
 					if new_level > self.light_map[(cx, cy)]:
 						self.light_map[(cx, cy)] = new_level
 					
-					# ray hit a wall or door
-					if self.GetCell(cx, cy) in [CELL_WALL, CELL_DOOR]:
+					# ray hit a wall
+					if self.GetCell(cx, cy) in [CELL_WALL]:
 						break
+					
+					# hit a blocking entity (eg. closed door)
+					if self.blocking_entity_map[(cx,cy)]:
+						break
+					
 		
 		# debug
 		if FULL_LIGHT:
@@ -523,7 +552,8 @@ class BlockFloor():
 				self.light_map[(x,y)] = 25
 		
 		# cast static lights
-		for entity in self.light_entities:
+		for entity in self.entities:
+			if entity.light_radius == 0: continue
 			(x, y) = entity.location
 			Raycast(x, y, entity.light_radius)
 				
@@ -551,7 +581,8 @@ class BlockFloor():
 			def IsBlocked(x, y):
 				return (x < 0 or y < 0
 					or x >= 61 or y >= 40
-					or self.GetCell(x, y) in [CELL_WALL, CELL_DOOR])
+					or self.GetCell(x, y) == CELL_WALL
+					or self.blocking_entity_map[(x,y)])
 			
 			if start < end: return
 			
@@ -622,7 +653,7 @@ class BlockFloor():
 	
 
 
-##### Entity Object - represents the player, one of the burglars, etc.
+##### Entity Object - represents a dynamic thing in the world: the player, one of the burglars, etc.
 class Entity:
 	def __init__(self):
 		self.is_player = False
@@ -630,20 +661,42 @@ class Entity:
 		self.location = (0,0)		# current location in the world
 		self.facing = None		# direction facing
 		self.light_radius = 0		# entity emits light to this radius
+		
+		self.is_door = False
+		self.open_state = False
+	
 	
 	# draw entity onto the entity console
 	def DrawMe(self):
 		
 		(x,y) = self.location
 		
-		# light entity
+		# light
 		if self.light_radius > 0:
-			libtcod.console_put_char_ex(entity_con, x, y, 254,
-				CONSOLE_COL_1, libtcod.black)
+			char = 254
+			col = CONSOLE_COL_1
 
 		elif self.is_player:
-			libtcod.console_put_char_ex(entity_con, x, y, 64,
-				CONSOLE_COL_1, libtcod.black)
+			char = 64
+			col = CONSOLE_COL_1
+		
+		elif self.is_door:
+			char = 196
+			col = CONSOLE_COL_3
+		
+		if self.is_player:
+			pass
+		# if not visible to player, display as dark as possible
+		elif not game.vis_map[(x,y)]:
+			col = CONSOLE_COL_8
+		else:
+		
+			# change display colour depending on light level of this cell
+			l = game.active_block.light_map[(x,y)]
+			col = col * libtcod.Color(l, l, l)
+
+		libtcod.console_put_char_ex(entity_con, x, y, char,
+			col, libtcod.black)
 						
 
 
@@ -795,7 +848,29 @@ class Game:
 						block.vertical_links[1] = self.block_map[(x,y)][block.floor+1]
 					if block.floor > 0:
 						block.vertical_links[-1] = self.block_map[(x,y)][block.floor-1]
-				
+	
+	
+	# player tries to open a door
+	def OpenDoor(self):
+		
+		# see if there is a door in front of player
+		(x,y) = self.player.location
+		(xm,ym) = self.player.facing
+		
+		x+=xm
+		y+=ym
+		
+		for entity in self.active_block.entities:
+			if entity.location != (x,y): continue
+			if not entity.is_door: continue
+			if entity.open_state: continue
+			
+			# found door, open it
+			entity.open_state = True
+			return True
+		
+		print('No closed door found')
+		return False
 		
 		
 	# try to move the player one cell in the given direction
@@ -811,24 +886,24 @@ class Game:
 		
 			(x,y) = self.player.location
 			
+			# if player is not yet facing this direction, rotate them
+			if self.player.facing != (x_dist, y_dist):
+				self.player.facing = (x_dist, y_dist)
+			
 			# make sure new location would still be on map
 			if x+x_dist < 0 or x+x_dist >= 61:
 				return
 			if y+y_dist < 0 or y+y_dist >= 40:
 				return
 			
-			# FUTURE: check for door blocking
+			# check for door blocking
+			if self.active_block.blocking_entity_map[(x+x_dist,y+y_dist)]: return
 			
 			# check for wall blocking
 			if self.active_block.char_map[(x+x_dist,y+y_dist)] == CELL_WALL: return
 			
 			# check for leaving the play area
 			if self.active_block.char_map[(x+x_dist,y+y_dist)] == CELL_NULL: return
-			
-			# if play is not yet facing this rdirection, rotate them
-			if self.player.facing != (x_dist, y_dist):
-				self.player.facing = (x_dist, y_dist)
-				#return
 			
 			# move the player
 			self.player.location = (x+x_dist, y+y_dist)
@@ -1065,12 +1140,12 @@ class Game:
 		libtcod.console_print(info_con, 4, 37, 'L')
 		
 		libtcod.console_set_default_foreground(info_con, CONSOLE_COL_3)
-		libtcod.console_print(info_con, 8, 32, 'Move')
-		libtcod.console_print(info_con, 8, 33, 'Run')
-		libtcod.console_print(info_con, 8, 34, 'Up/Down')
-		libtcod.console_print(info_con, 8, 35, 'Enter')
-		libtcod.console_print(info_con, 8, 36, 'Map')
-		libtcod.console_print(info_con, 8, 37, 'Log')
+		libtcod.console_print(info_con, 7, 32, 'Move')
+		libtcod.console_print(info_con, 7, 33, 'Run')
+		libtcod.console_print(info_con, 7, 34, 'Up/Down')
+		libtcod.console_print(info_con, 7, 35, 'Open/Enter')
+		libtcod.console_print(info_con, 7, 36, 'Map')
+		libtcod.console_print(info_con, 7, 37, 'Log')
 		
 	
 	# update the floor map console
@@ -1090,9 +1165,6 @@ class Game:
 				elif cell == CELL_WALL:
 					char = 178
 					col = CONSOLE_COL_4
-				elif cell == CELL_DOOR:
-					char = 196
-					col = CONSOLE_COL_3
 				elif cell == CELL_LINK:
 					char = 240
 					col = CONSOLE_COL_1
@@ -1122,13 +1194,9 @@ class Game:
 	# draw entities to the entity console
 	def UpdateEntityCon(self):
 		libtcod.console_clear(entity_con)
-		
-		# draw light entitites first
-		for entity in self.active_block.light_entities:
+		for entity in self.active_block.entities:
 			entity.DrawMe()
-		
-		for entity in self.entities:
-			entity.DrawMe()
+		self.player.DrawMe()
 	
 	
 	# update most recent message console
@@ -1227,8 +1295,20 @@ class Game:
 					SaveGame()
 				continue
 			
-			# link to new block
+			# open door or enter link to new block
 			elif key_char == 'e':
+				
+				if self.OpenDoor():
+					self.active_block.GenerateSightBlockMap()
+					self.active_block.GenerateVisMap()
+					self.active_block.GenerateLightMap()
+					self.UpdateInfoCon()
+					self.UpdateMapCon()
+					self.UpdateEntityCon()
+					self.UpdateScreen()
+					SaveGame()
+					continue
+				
 				if self.LinkPlayer():
 					self.active_block.GenerateVisMap()
 					self.active_block.GenerateLightMap()

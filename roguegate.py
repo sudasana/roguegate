@@ -26,7 +26,7 @@
 import os, sys						# OS-related stuff
 import libtcodpy as libtcod
 import shelve						# saving and loading games
-from random import choice, shuffle
+from random import choice, shuffle, sample
 from math import sqrt
 from copy import deepcopy
 from textwrap import wrap				# breaking up strings
@@ -188,8 +188,10 @@ class Room():
 
 ##### BlockFloor Object - represents one floor of one block of the entire complex #####
 class BlockFloor():
-	def __init__(self, floor, outdoor=False):
+	def __init__(self, x, y, floor, outdoor=False):
 		
+		self.x = x
+		self.y = y
 		self.floor = floor
 		self.outdoor = outdoor			# block is only the ground floor of an outdoor area
 		self.letter = ''			# block letter, A-
@@ -499,7 +501,6 @@ class BlockFloor():
 				cast_start = 0
 				cast_end = 361
 			else:
-				
 				if facing == (0,-1):
 					cast_start = 135
 					cast_end = 225
@@ -675,6 +676,8 @@ class BlockFloor():
 class Entity:
 	def __init__(self):
 		self.is_player = False
+		self.is_burglar = False
+		self.is_human = False		# human entity: burglar or staff member
 		self.block = None		# pointer to block location
 		self.location = (0,0)		# current location in the world
 		self.facing = None		# direction facing
@@ -699,6 +702,10 @@ class Entity:
 
 		elif self.is_player:
 			char = 64
+			col = CONSOLE_COL_1
+		
+		elif self.is_human:
+			char = 2
 			col = CONSOLE_COL_1
 		
 		elif self.is_door:
@@ -786,6 +793,9 @@ class Game:
 		# put player in block A to start and move viewport to there
 		self.MovePlayerToBlock('A')
 		self.active_block = self.player.block
+		
+		# generate AI entities
+		self.SpawnAIEntities()
 	
 	
 	# add a game message
@@ -826,24 +836,38 @@ class Game:
 				
 				# blocks in center of complex have less chance of being spawned
 				if y == 1 and 0 < x < 4:
-					chance = 30
+					chance = 20
 				else:
-					chance = 80
+					chance = 70
 				
 				# modify by already existing number of blocks
 				chance -= total_blocks * 5
 				
 				if libtcod.random_get_int(0, 1, 100) <= chance:
-					self.block_map[(x,y)].append(BlockFloor(0))
+					self.block_map[(x,y)].append(BlockFloor(x, y, 0))
 					total_blocks += 1
 				else:
-					self.block_map[(x,y)].append(BlockFloor(0, outdoor=True))
+					self.block_map[(x,y)].append(BlockFloor(x, y, 0, outdoor=True))
 			
 			# apply block number restrictions
-			if total_blocks <= 9 or total_blocks >= 13:
+			if total_blocks <= 7 or total_blocks >= 12:
 				continue
-			else: 
-				break
+			
+			# make sure there are at least 3 outdoors blocks along the edge
+			outdoor_blocks = 0
+			for x in range(5):
+				for y in range(3):
+					# not an edge block
+					if y == 1 and 0 < x < 4: continue
+					if self.block_map[(x,y)][0].outdoor:
+						outdoor_blocks += 1
+			
+			if outdoor_blocks < 3: continue
+			
+			# map is good!
+			print('Generated map after ' + str(tries) + ' tries')
+			break
+			
 		
 		# apply letters and check for upper floor generation
 		i = 0
@@ -944,7 +968,35 @@ class Game:
 					AddWall(x1, y1, horizontal_shift1)
 					block.SetCell(x2, y2, CELL_STAIRS, False, False)
 					AddWall(x2, y2, horizontal_shift2)
-				
+	
+	# generate AI entities: burglars and random staff
+	def SpawnAIEntities(self):
+		
+		# generate five burglars and place them at the outer edge of random outdoor blocks
+		floor_list = []
+		for x in range(5):
+			for y in range(3):
+				# not an edge block
+				if y == 1 and 0 < x < 4: continue
+				if self.block_map[(x,y)][0].outdoor:
+					floor_list.append(self.block_map[(x,y)][0])
+		
+		print('DEBUG: Identified ' + str(len(floor_list)) + ' possible entry blocks')
+		
+		for i in range(5):
+			new_entity = Entity()
+			new_entity.is_burglar = True
+			new_entity.is_human = True
+			
+			block = choice(floor_list)
+			new_entity.block = block
+			
+			# TODO: choose a random point in the block, check to see if another
+			# entity is already there
+			
+			new_entity.location = block.center_point
+			block.entities.append(new_entity)
+			print('DEBUG: Added a burglar in Block ' + str(block.x) + ',' + str(block.y))
 
 	
 	# player tries to open a door
@@ -992,8 +1044,11 @@ class Game:
 			if y+y_dist < 0 or y+y_dist >= 40:
 				return
 			
-			# check for door blocking
-			if self.active_block.blocking_entity_map[(x+x_dist,y+y_dist)]: return
+			# check for entity blocking
+			for entity in self.active_block.entities:
+				if entity.location != (x+x_dist,y+y_dist): continue
+				if entity.is_door: return
+				if entity.is_human: return
 			
 			# check for wall blocking
 			if self.active_block.char_map[(x+x_dist,y+y_dist)] == CELL_WALL: return
@@ -1415,6 +1470,7 @@ class Game:
 					continue
 				
 				if self.LinkPlayer():
+					self.active_block.GenerateSightBlockMap()
 					self.active_block.GenerateVisMap()
 					self.active_block.GenerateLightMap()
 					self.UpdateInfoCon()

@@ -798,6 +798,13 @@ class Game:
 		self.SpawnAIEntities()
 	
 	
+	# allow AI entities to act
+	def DoAITurn(self):
+		print('DEBUG: Starting AI turn')
+		
+		print('DEBUG: AI turn finished')
+	
+	
 	# add a game message
 	def AddMessage(self, text):
 		self.msg_log.append(text)
@@ -1024,40 +1031,35 @@ class Game:
 	# try to move the player one cell in the given direction
 	def MovePlayer(self, x_dist, y_dist):
 		
-		# check for shift modifier
-		max_moves = 1
+		(x,y) = self.player.location
 		
-		if key.shift:
-			max_moves = 3
+		# if player is not yet facing this direction, rotate them
+		if self.player.facing != (x_dist, y_dist):
+			self.player.facing = (x_dist, y_dist)
 		
-		for i in range(max_moves):
+		# make sure new location would still be on map
+		if x+x_dist < 0 or x+x_dist >= 61:
+			return False
+		if y+y_dist < 0 or y+y_dist >= 40:
+			return False
 		
-			(x,y) = self.player.location
-			
-			# if player is not yet facing this direction, rotate them
-			if self.player.facing != (x_dist, y_dist):
-				self.player.facing = (x_dist, y_dist)
-			
-			# make sure new location would still be on map
-			if x+x_dist < 0 or x+x_dist >= 61:
-				return
-			if y+y_dist < 0 or y+y_dist >= 40:
-				return
-			
-			# check for entity blocking
-			for entity in self.active_block.entities:
-				if entity.location != (x+x_dist,y+y_dist): continue
-				if entity.is_door: return
-				if entity.is_human: return
-			
-			# check for wall blocking
-			if self.active_block.char_map[(x+x_dist,y+y_dist)] == CELL_WALL: return
-			
-			# check for leaving the play area
-			if self.active_block.char_map[(x+x_dist,y+y_dist)] == CELL_NULL: return
-			
-			# move the player
-			self.player.location = (x+x_dist, y+y_dist)
+		# check for entity blocking
+		for entity in self.active_block.entities:
+			if entity.location != (x+x_dist,y+y_dist): continue
+			if entity.is_door:
+				if not entity.open_state: return False
+			if entity.is_human: return False
+		
+		# check for wall blocking
+		if self.active_block.char_map[(x+x_dist,y+y_dist)] == CELL_WALL: return False
+		
+		# check for leaving the play area
+		if self.active_block.char_map[(x+x_dist,y+y_dist)] == CELL_NULL: return False
+		
+		# move the player
+		self.player.location = (x+x_dist, y+y_dist)
+		
+		return True
 	
 	
 	# try to warp the player to an adjacent block
@@ -1434,13 +1436,22 @@ class Game:
 				else:
 					y_dist = 1
 				
-				self.MovePlayer(x_dist, y_dist)
-				self.active_block.GenerateVisMap()
-				self.active_block.GenerateLightMap()
-				self.UpdateMapCon()
-				self.UpdateEntityCon()
-				self.UpdateScreen()
-				SaveGame()
+				# check for shift modifier
+				max_moves = 1
+				if key.shift:
+					max_moves = 3
+				
+				for i in range(max_moves):
+					result = self.MovePlayer(x_dist, y_dist)
+					self.active_block.GenerateVisMap()
+					self.active_block.GenerateLightMap()
+					self.UpdateMapCon()
+					self.UpdateEntityCon()
+					self.UpdateScreen()
+					libtcod.console_flush()
+					if result is False: break	# further moves not possible
+					self.DoAITurn()
+					SaveGame()
 				continue
 			
 			# try to move up or down floors
@@ -1452,6 +1463,7 @@ class Game:
 					self.UpdateMapCon()
 					self.UpdateEntityCon()
 					self.UpdateScreen()
+					self.DoAITurn()
 					SaveGame()
 				continue
 			
@@ -1477,6 +1489,7 @@ class Game:
 					self.UpdateMapCon()
 					self.UpdateEntityCon()
 					self.UpdateScreen()
+					self.DoAITurn()
 					SaveGame()
 				continue
 			

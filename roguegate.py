@@ -274,7 +274,7 @@ class BlockFloor():
 		# character map - one for each possible map cell
 		# set all cells to null to start
 		for x in range(61):
-			for y in range(40):
+			for y in range(38):
 				self.char_map[(x,y)] = CELL_NULL
 		
 		# clear list of rooms, entities
@@ -284,9 +284,9 @@ class BlockFloor():
 		# outdoor blocks are set up differently
 		if self.outdoor:
 			for x in range(61):
-				for y in range(40):
+				for y in range(38):
 					self.char_map[(x,y)] = CELL_TILE
-			self.center_point = (30, 20)
+			self.center_point = (30, 19)
 			for x in range(10, 51, 10):
 				self.AddLight(x, 20, 5)
 			for y in range(10, 31, 10):
@@ -427,7 +427,7 @@ class BlockFloor():
 		
 		# clear current map
 		for x in range(61):
-			for y in range(40):
+			for y in range(38):
 				self.blocking_entity_map[(x,y)] = False
 		
 		for entity in self.entities:
@@ -561,13 +561,13 @@ class BlockFloor():
 		# debug
 		if FULL_LIGHT:
 			for x in range(61):
-				for y in range(40):
+				for y in range(38):
 					self.light_map[(x,y)] = 255
 			return
 
 		# reset light levels
 		for x in range(61):
-			for y in range(40):
+			for y in range(38):
 				self.light_map[(x,y)] = 25
 		
 		# cast static lights
@@ -599,7 +599,7 @@ class BlockFloor():
 			
 			def IsBlocked(x, y):
 				return (x < 0 or y < 0
-					or x >= 61 or y >= 40
+					or x >= 61 or y >= 38
 					or self.GetCell(x, y) == CELL_WALL
 					or self.blocking_entity_map[(x,y)])
 			
@@ -653,13 +653,13 @@ class BlockFloor():
 		# debug flag
 		if FULL_VIS:
 			for x in range(61):
-				for y in range(40):
+				for y in range(38):
 					game.vis_map[(x,y)] = True
 			return
 
 		# clear current vis map
 		for x in range(61):
-			for y in range(40):
+			for y in range(38):
 				game.vis_map[(x,y)] = False
 		
 		# cast in all 8 octants
@@ -781,7 +781,7 @@ class Game:
 		self.active_floor = 0				# current floor in viewport
 		self.vis_map = {}				# visibility for player in current block
 		for x in range(61):
-			for y in range(40):
+			for y in range(38):
 				self.vis_map[(x,y)] = False
 		
 		# create player object
@@ -1308,7 +1308,7 @@ class Game:
 		
 		# draw each map cell to the console
 		for x in range(61):
-			for y in range(40):
+			for y in range(38):
 				
 				cell = self.active_block.char_map[(x,y)]
 				if cell == CELL_NULL:
